@@ -58,20 +58,81 @@
         </div>
     </div>
 
-    <script>
-        document.getElementById('fecha-actual').innerText = new Date().toLocaleDateString();
+    <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
+    <div class="mb-8 text-center">
+        <h1 class="text-3xl font-bold text-[#00E0D0] mb-2">VIVE QUINTAY</h1>
+        <p class="text-gray-400">Acceso Administrativo</p>
+    </div>
+    <div class="w-full max-w-xs">
+        <input type="password" id="input-pass" placeholder="Ingresa clave" 
+            class="w-full p-4 rounded-xl bg-[#1B263B] border border-[#00E0D0] text-white text-center text-2xl mb-4 focus:outline-none">
+        <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-bold rounded-xl active:scale-95 transition-transform">
+            ENTRAR
+        </button>
+        <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden">Clave incorrecta</p>
+    </div>
+</div>
+
+<script type="module">
+    // 1. Configuración con TUS datos reales
+    const firebaseConfig = {
+        apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k",
+        authDomain: "vive-quintay-spa.firebaseapp.com",
+        projectId: "vive-quintay-spa",
+        storageBucket: "vive-quintay-spa.firebasestorage.app",
+        messagingSenderId: "1016972577353",
+        appId: "1:1016972577353:web:81a7a1af882c8296640d98",
+        measurementId: "G-E0GZE2NWDD"
+    };
+
+    // 2. Importación desde la nube (CDN)
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // 3. Función de Verificación de Clave
+    async function verificarClave() {
+        const passIngresada = document.getElementById('input-pass').value;
+        const errorMsg = document.getElementById('error-pass');
         
-        // Aquí conectaremos con tu Firebase Config mañana
-    </script>
-    <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js')
-        .then(reg => console.log('SW registrado'))
-        .catch(err => console.log('Error SW', err));
-    });
-  }
-    </script>
+        try {
+            // Buscamos la clave en la colección "configuracion", documento "seguridad"
+            const docRef = doc(db, "configuracion", "seguridad");
+            const docSnap = await getDoc(docRef);
+
+            if (docSnap.exists() && passIngresada === docSnap.data().pin) {
+                document.getElementById('pantalla-bloqueo').style.display = 'none';
+                sessionStorage.setItem('autenticado', 'true');
+            } else {
+                errorMsg.classList.remove('hidden');
+                errorMsg.innerText = "Clave incorrecta";
+            }
+        } catch (e) {
+            errorMsg.classList.remove('hidden');
+            errorMsg.innerText = "Crea la colección en Firebase primero";
+        }
+    }
+
+    // Escuchar el click del botón
+    document.getElementById('btn-entrar').onclick = verificarClave;
+
+    // Persistencia de sesión (para no pedir clave a cada rato)
+    if (sessionStorage.getItem('autenticado') === 'true') {
+        document.getElementById('pantalla-bloqueo').style.display = 'none';
+    }
+
+    // 4. Mostrar fecha actual
+    document.getElementById('fecha-actual').innerText = new Date().toLocaleDateString('es-CL');
+
+    // 5. Registrar Service Worker
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('sw.js').then(reg => console.log('SW OK'));
+        });
+    }
+        </script>
     
 </body>
 </html>
