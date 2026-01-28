@@ -1,3 +1,6 @@
+{
+  "short_name": "QuintayAdmin",
+  "name": "Vive Quintay ADMIN",
   "icons": [
     {
       "src": "logo.png",
@@ -6,8 +9,7 @@
       "purpose": "any maskable"
     }
   ],
-
-  "start_url": ".",
+  "start_url": "./index.html",
   "display": "standalone",
   "theme_color": "#0A2F4F",
   "background_color": "#0A2F4F"
