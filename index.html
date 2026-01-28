@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vive Quintay ADMIN</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #0A2F4F; color: white; }
+        .card { background-color: #0D3B5C; border-radius: 15px; padding: 20px; margin-bottom: 20px; border: 1px solid #1B263B; }
+    </style>
+</head>
+<body class="p-4 font-sans">
+
+    <header class="flex justify-between items-center mb-6">
+        <div>
+            <h1 class="text-2xl font-bold text-[#00E0D0]">VIVE QUINTAY</h1>
+            <p class="text-gray-400 text-sm">Panel Administrativo</p>
+        </div>
+        <div class="bg-[#1B263B] p-2 rounded-lg">
+            <span id="fecha-actual" class="text-xs">--/--/--</span>
+        </div>
+    </header>
+
+    <div class="grid grid-cols-2 gap-4 mb-6">
+        <div class="card flex flex-col items-center">
+            <span class="text-gray-400 text-xs uppercase">Hoy Recaudado</span>
+            <span id="total-hoy" class="text-2xl font-bold text-[#00C853]">$0</span>
+        </div>
+        <div class="card flex flex-col items-center">
+            <span class="text-gray-400 text-xs uppercase">Vehículos</span>
+            <span id="cant-hoy" class="text-2xl font-bold text-[#FFD700]">0</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="text-center mb-4 font-semibold">DISTRIBUCIÓN DE PAGOS</h2>
+        <canvas id="chartPagos" style="max-height: 250px;"></canvas>
+    </div>
+
+    <div class="card">
+        <h2 class="text-center mb-4 font-semibold">INGRESOS ÚLTIMOS 7 DÍAS</h2>
+        <canvas id="chartSemanal" style="max-height: 250px;"></canvas>
+    </div>
+
+    <div class="card">
+        <h2 class="mb-4 font-semibold">ÚLTIMOS CIERRES</h2>
+        <div id="lista-cierres" class="text-sm space-y-3">
+            <p class="text-gray-500 italic">Cargando datos de Firebase...</p>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('fecha-actual').innerText = new Date().toLocaleDateString();
+        
+        // Aquí conectaremos con tu Firebase Config mañana
+    </script>
+</body>
+</html>
