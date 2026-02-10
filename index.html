@@ -76,7 +76,6 @@
 
     <div class="card">
         <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
-        <p class="text-[9px] text-center text-gray-500 mb-4 uppercase tracking-tighter">Toca un cierre para ver el detalle</p>
         <div id="lista-cierres" class="text-xs space-y-3">
             <p class="text-gray-500 italic text-center text-xs">Sin datos históricos aún</p>
         </div>
@@ -117,21 +116,77 @@
     let chartPagos;
     let chartSemanal;
 
-    // --- FUNCIONES DE GRÁFICOS ---
-    function actualizarGraficoPagos(efectivo, tarjeta) {
+    // --- ACCESO CORREGIDO ---
+    async function verificarClave() {
+        const pass = document.getElementById('input-pass').value;
+        const errorMsg = document.getElementById('error-pass');
+        try {
+            const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
+            if (docSnap.exists() && pass.toString() === docSnap.data().pin.toString()) {
+                document.getElementById('pantalla-bloqueo').style.display = 'none';
+                sessionStorage.setItem('autenticado_admin', 'true');
+                iniciarEscuchas();
+            } else {
+                errorMsg.classList.remove('hidden');
+            }
+        } catch (e) { 
+            console.error(e);
+            alert("Error de conexión");
+        }
+    }
+
+    // --- INICIAR ESCUCHAS (DATOS) ---
+    function iniciarEscuchas() {
+        onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
+            if (docSnap.exists()) {
+                const d = docSnap.data();
+                
+                // Actualizar números superiores
+                document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
+                document.getElementById('cant-hoy').innerText = (d.cant_pases || 0) + (d.cant_minutos || 0);
+                
+                // Desglose
+                document.getElementById('num-minutos').innerText = `${d.cant_minutos || 0} vh`;
+                document.getElementById('num-pases').innerText = `${d.cant_pases || 0} vh`;
+                document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
+                document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
+
+                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
+                document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
+
+                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
+            }
+        });
+
+        // Historial
+        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
+        onSnapshot(q, (snapshot) => {
+            let labels = []; let montos = []; let html = "";
+            snapshot.forEach((doc) => {
+                const d = doc.data();
+                labels.push(d.fecha);
+                montos.push(d.total_recaudado);
+                html += `<div class="flex justify-between items-center glass p-3 px-4 mb-2">
+                            <span>${d.fecha}</span>
+                            <span class="font-bold text-[#00C853]">$${d.total_recaudado.toLocaleString('es-CL')}</span>
+                         </div>`;
+            });
+            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
+            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
+        });
+    }
+
+    // --- GRÁFICOS ---
+    function actualizarGraficoPagos(ef, tj) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
         chartPagos = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Efectivo', 'Tarjeta'],
-                datasets: [{
-                    data: [efectivo, tarjeta],
-                    backgroundColor: ['#00C853', '#00E0D0'],
-                    borderWidth: 0, hoverOffset: 4
-                }]
+                datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }]
             },
-            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', font: { size: 10, weight: 'bold' } } } } }
+            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF' } } } }
         });
     }
 
@@ -142,129 +197,17 @@
             type: 'line',
             data: {
                 labels: labels,
-                datasets: [{
-                    data: montos,
-                    borderColor: '#00E0D0',
-                    borderWidth: 3,
-                    pointBackgroundColor: '#00E0D0',
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    backgroundColor: 'rgba(0, 224, 208, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
+                datasets: [{ data: montos, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.1)' }]
             },
-            options: { 
-                plugins: { legend: { display: false } },
-                scales: { 
-                    y: { display: false },
-                    x: { ticks: { color: '#6B7280', font: { size: 8 } }, grid: { display: false } }
-                }
-            }
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280' } } } }
         });
     }
 
-    // --- ESCUCHA DE DATOS ---
-    function iniciarEscuchas() {
-        onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
-            if (docSnap.exists()) {
-                const d = docSnap.data();
-                const totalCalculado = parseInt(d.total_hoy) || 0;
-                const pases = parseInt(d.cant_pases) || 0;
-                const minutos = parseInt(d.cant_minutos) || 0;
-                
-                document.getElementById('total-hoy').innerText = `$${totalCalculado.toLocaleString('es-CL')}`;
-                document.getElementById('cant-hoy').innerText = pases + minutos;
-                document.getElementById('num-minutos').innerText = `${minutos} vh`;
-                document.getElementById('num-pases').innerText = `${pases} vh`;
-                document.getElementById('dinero-minutos').innerText = `$${(parseInt(d.dinero_minutos) || 0).toLocaleString('es-CL')}`;
-                document.getElementById('dinero-pases').innerText = `$${(parseInt(d.dinero_pases) || 0).toLocaleString('es-CL')}`;
-                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
-                document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
-
-                actualizarGraficoPagos(parseInt(d.efectivo) || 0, parseInt(d.tarjeta) || 0);
-            }
-        });
-
-        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
-        onSnapshot(q, (snapshot) => {
-            let labels = []; let montos = []; let html = "";
-            snapshot.forEach((docSnap) => {
-                const d = docSnap.data();
-                labels.push(d.fecha);
-                montos.push(d.total_recaudado);
-                html += `
-                    <div onclick="verDetalleCierre('${d.fecha}', ${d.total_recaudado}, ${d.efectivo || 0}, ${d.tarjeta || 0}, ${d.pases || 0}, ${d.minutos || 0})" 
-                         class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer border-l-4 border-[#00E0D0]">
-                        <div class="flex flex-col text-left">
-                            <span class="text-gray-200 font-bold text-sm tracking-tighter">${d.fecha}</span>
-                            <span class="text-[8px] text-gray-500 uppercase font-black">Ver foto del día</span>
-                        </div>
-                        <span class="font-black text-[#00C853] text-sm font-mono">$${d.total_recaudado.toLocaleString('es-CL')}</span>
-                    </div>`;
-            });
-            document.getElementById('lista-cierres').innerHTML = html || "Esperando cierres...";
-            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
-        });
-    }
-
-    // --- SISTEMA DE ACCESO ---
-    async function verificarClave() {
-        const inputPass = document.getElementById('input-pass').value;
-        const errorMsg = document.getElementById('error-pass');
-        
-        try {
-            const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
-            if (docSnap.exists()) {
-                const pinServidor = docSnap.data().pin.toString();
-                if (inputPass === pinServidor) {
-                    document.getElementById('pantalla-bloqueo').style.display = 'none';
-                    sessionStorage.setItem('autenticado_admin', 'true');
-                    iniciarEscuchas();
-                } else {
-                    errorMsg.classList.remove('hidden');
-                }
-            }
-        } catch (e) {
-            console.error("Error de autenticación:", e);
-            alert("Error de conexión con Firebase");
-        }
-    }
-
-    // Eventos de botones
+    // Eventos
     document.getElementById('btn-entrar').onclick = verificarClave;
-    document.getElementById('input-pass').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') verificarClave();
-    });
-
-    // Auto-login si ya estaba autenticado
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
         iniciarEscuchas();
-    }
-
-    // Detalle cierre (Global)
-    window.verDetalleCierre = function(fecha, total, ef, tj, ps, mn) {
-        const totalVehiculos = (ps || 0) + (mn || 0);
-        const modalHTML = `
-            <div id="modal-detalle" class="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-                <div class="card w-full max-w-xs border-t-4 border-[#00E0D0] modal-anim">
-                    <div class="flex justify-between items-center mb-6">
-                        <h3 class="text-[#00E0D0] font-black text-xl italic">${fecha}</h3>
-                        <button onclick="document.getElementById('modal-detalle').remove()" class="text-white text-3xl">&times;</button>
-                    </div>
-                    <div class="space-y-4">
-                        <div class="flex justify-between"><span>Total:</span><b>$${total.toLocaleString('es-CL')}</b></div>
-                        <div class="flex justify-between"><span>Vehículos:</span><b>${totalVehiculos}</b></div>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div class="bg-white/5 p-2 rounded text-center"><small>EFECTIVO</small><br><b>$${ef.toLocaleString('es-CL')}</b></div>
-                            <div class="bg-white/5 p-2 rounded text-center"><small>TARJETA</small><br><b>$${tj.toLocaleString('es-CL')}</b></div>
-                        </div>
-                    </div>
-                    <button onclick="document.getElementById('modal-detalle').remove()" class="w-full mt-6 p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-xl">CERRAR</button>
-                </div>
-            </div>`;
-        document.body.insertAdjacentHTML('beforeend', modalHTML);
     }
 </script>
 </body>
