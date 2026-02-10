@@ -5,12 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vive Quintay ADMIN</title>
     <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0A2F4F">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="apple-touch-icon" href="logo.png">
+    <meta name="theme-color" content="#0A2F4F">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="logo.png">
 
-    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -25,8 +24,9 @@
             <h1 class="text-2xl font-bold text-[#00E0D0]">VIVE QUINTAY</h1>
             <p class="text-gray-400 text-sm">Panel Administrativo</p>
         </div>
-        <div class="bg-[#1B263B] p-2 rounded-lg">
-            <span id="fecha-actual" class="text-xs">--/--/--</span>
+        <div class="bg-[#1B263B] p-2 rounded-lg text-center">
+            <span id="fecha-actual" class="text-xs block">--/--/--</span>
+            <span id="hora-sincro" class="text-[10px] text-[#00E0D0] block">Esperando datos...</span>
         </div>
     </header>
 
@@ -42,39 +42,39 @@
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 font-semibold">DISTRIBUCIÓN DE PAGOS</h2>
-        <canvas id="chartPagos" style="max-height: 250px;"></canvas>
+        <h2 class="text-center mb-4 font-semibold text-xs text-gray-400 uppercase">Distribución de Pagos (Hoy)</h2>
+        <canvas id="chartPagos" style="max-height: 200px;"></canvas>
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 font-semibold">INGRESOS ÚLTIMOS 7 DÍAS</h2>
-        <canvas id="chartSemanal" style="max-height: 250px;"></canvas>
+        <h2 class="text-center mb-4 font-semibold text-xs text-gray-400 uppercase">Ingresos Últimos 7 Días</h2>
+        <canvas id="chartSemanal" style="max-height: 200px;"></canvas>
     </div>
 
     <div class="card">
-        <h2 class="mb-4 font-semibold">ÚLTIMOS CIERRES</h2>
+        <h2 class="mb-4 font-semibold text-xs text-gray-400 uppercase">Historial de Cierres</h2>
         <div id="lista-cierres" class="text-sm space-y-3">
-            <p class="text-gray-500 italic">Cargando datos de Firebase...</p>
+            <p class="text-gray-500 italic">Cargando Firebase...</p>
         </div>
     </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
-    <div class="mb-8 text-center">
-        <h1 class="text-3xl font-bold text-[#00E0D0] mb-2">VIVE QUINTAY</h1>
-        <p class="text-gray-400">Acceso Administrativo</p>
+        <div class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-[#00E0D0] mb-2">VIVE QUINTAY</h1>
+            <p class="text-gray-400">Acceso Administrativo</p>
+        </div>
+        <div class="w-full max-w-xs">
+            <input type="password" id="input-pass" placeholder="Ingresa PIN" 
+                class="w-full p-4 rounded-xl bg-[#1B263B] border border-[#00E0D0] text-white text-center text-2xl mb-4 focus:outline-none">
+            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-bold rounded-xl active:scale-95 transition-transform">
+                ENTRAR
+            </button>
+            <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden">Clave incorrecta</p>
+        </div>
     </div>
-    <div class="w-full max-w-xs">
-        <input type="password" id="input-pass" placeholder="Ingresa clave" 
-            class="w-full p-4 rounded-xl bg-[#1B263B] border border-[#00E0D0] text-white text-center text-2xl mb-4 focus:outline-none">
-        <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-bold rounded-xl active:scale-95 transition-transform">
-            ENTRAR
-        </button>
-        <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden">Clave incorrecta</p>
-    </div>
-</div>
 
 <script type="module">
-    // 1. Configuración con TUS datos reales
+    // 1. Configuración de Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k",
         authDomain: "vive-quintay-spa.firebaseapp.com",
@@ -85,54 +85,146 @@
         measurementId: "G-E0GZE2NWDD"
     };
 
-    // 2. Importación desde la nube (CDN)
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // 3. Función de Verificación de Clave
+    // Variables globales para los gráficos
+    let chartPagos;
+    let chartSemanal;
+
+    // --- FUNCIÓN: ESCUCHA DE DATOS HOY (TIEMPO REAL) ---
+    function iniciarEscuchaDashboard() {
+        // Escuchamos el documento que el Python actualiza cada 2 horas
+        onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                
+                // Actualizar números superiores
+                document.getElementById('total-hoy').innerText = `$${data.total_hoy.toLocaleString('es-CL')}`;
+                document.getElementById('cant-hoy').innerText = (data.cant_pases + data.cant_minutos);
+                document.getElementById('hora-sincro').innerText = `Sincro: ${data.ultima_actualizacion}`;
+                document.getElementById('fecha-actual').innerText = data.fecha_dato || new Date().toLocaleDateString('es-CL');
+
+                // Actualizar Gráfico de Dona (Efectivo vs Tarjeta)
+                actualizarGraficoPagos(data.efectivo, data.tarjeta);
+            }
+        });
+    }
+
+    // --- FUNCIÓN: CARGAR HISTÓRICO (ÚLTIMOS 7 DÍAS) ---
+    function iniciarEscuchaHistoricos() {
+        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(7));
+        
+        onSnapshot(q, (snapshot) => {
+            let labels = [];
+            let montos = [];
+            let html = "";
+
+            snapshot.forEach((doc) => {
+                const d = doc.data();
+                labels.push(d.fecha);
+                montos.push(d.total_recaudado);
+                html += `
+                    <div class="flex justify-between border-b border-gray-800 pb-2">
+                        <span>${d.fecha}</span>
+                        <span class="font-bold text-[#00C853]">$${d.total_recaudado.toLocaleString('es-CL')}</span>
+                    </div>`;
+            });
+
+            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres registrados";
+            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
+        });
+    }
+
+    // --- LÓGICA DE GRÁFICOS (CHART.JS) ---
+    function actualizarGraficoPagos(efectivo, tarjeta) {
+        const ctx = document.getElementById('chartPagos').getContext('2d');
+        if (chartPagos) chartPagos.destroy();
+        chartPagos = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Efectivo', 'Tarjeta'],
+                datasets: [{
+                    data: [efectivo, tarjeta],
+                    backgroundColor: ['#00C853', '#00E0D0'],
+                    borderWidth: 0
+                }]
+            },
+            options: { cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', font: { size: 10 } } } } }
+        });
+    }
+
+    function actualizarGraficoSemanal(labels, montos) {
+        const ctx = document.getElementById('chartSemanal').getContext('2d');
+        if (chartSemanal) chartSemanal.destroy();
+        chartSemanal = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Ingresos',
+                    data: montos,
+                    borderColor: '#00E0D0',
+                    backgroundColor: 'rgba(0, 224, 208, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: { 
+                plugins: { legend: { display: false } },
+                scales: { 
+                    y: { display: false },
+                    x: { ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { display: false } }
+                }
+            }
+        });
+    }
+
+    // --- SEGURIDAD: VERIFICACIÓN DE PIN ---
     async function verificarClave() {
         const passIngresada = document.getElementById('input-pass').value;
         const errorMsg = document.getElementById('error-pass');
         
         try {
-            // Buscamos la clave en la colección "configuracion", documento "seguridad"
             const docRef = doc(db, "configuracion", "seguridad");
             const docSnap = await getDoc(docRef);
 
-            if (docSnap.exists() && passIngresada === docSnap.data().pin) {
+            if (docSnap.exists() && passIngresada === docSnap.data().pin.toString()) {
                 document.getElementById('pantalla-bloqueo').style.display = 'none';
-                sessionStorage.setItem('autenticado', 'true');
+                sessionStorage.setItem('autenticado_admin', 'true');
+                // Al entrar con éxito, activamos las escuchas de datos
+                iniciarEscuchaDashboard();
+                iniciarEscuchaHistoricos();
             } else {
                 errorMsg.classList.remove('hidden');
-                errorMsg.innerText = "Clave incorrecta";
+                errorMsg.innerText = "PIN Incorrecto";
             }
         } catch (e) {
+            console.error(e);
             errorMsg.classList.remove('hidden');
-            errorMsg.innerText = "Crea la colección en Firebase primero";
+            errorMsg.innerText = "Error de conexión con Firebase";
         }
     }
 
-    // Escuchar el click del botón
+    // Eventos de botones
     document.getElementById('btn-entrar').onclick = verificarClave;
-
-    // Persistencia de sesión (para no pedir clave a cada rato)
-    if (sessionStorage.getItem('autenticado') === 'true') {
+    
+    // Si ya estaba autenticado
+    if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
+        iniciarEscuchaDashboard();
+        iniciarEscuchaHistoricos();
     }
 
-    // 4. Mostrar fecha actual
-    document.getElementById('fecha-actual').innerText = new Date().toLocaleDateString('es-CL');
-
-    // 5. Registrar Service Worker
+    // Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').then(reg => console.log('SW OK'));
+            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail', err));
         });
     }
-        </script>
-    
+</script>
 </body>
 </html>
