@@ -210,5 +210,45 @@
         iniciarEscuchas();
     }
 </script>
+    <div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-[#0D3B5C] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/10 modal-anim">
+        <div class="p-6 border-b border-white/5 flex justify-between items-center bg-[#0A2F4F]">
+            <div>
+                <h3 id="modal-fecha" class="text-xl font-bold text-[#00E0D0]">--/--/--</h3>
+                <p class="text-[10px] text-gray-400 uppercase tracking-widest">Resumen de Jornada</p>
+            </div>
+            <button onclick="cerrarModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+        </div>
+        <div class="p-6 space-y-4">
+            <div class="grid grid-cols-2 gap-4">
+                <div class="glass p-3">
+                    <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
+                    <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
+                </div>
+                <div class="glass p-3">
+                    <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
+                    <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
+                </div>
+            </div>
+            <div class="space-y-2 pt-2">
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">Tickets por Minuto:</span>
+                    <span id="modal-minutos" class="font-bold">0</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-400">Pases Diarios:</span>
+                    <span id="modal-pases" class="font-bold">0</span>
+                </div>
+                <div class="flex justify-between text-sm border-t border-white/5 pt-2">
+                    <span class="text-[#00E0D0] font-bold">Total Recaudado:</span>
+                    <span id="modal-total" class="text-[#00E0D0] font-bold text-lg">$0</span>
+                </div>
+            </div>
+        </div>
+        <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-colors">
+            CERRAR DETALLE
+        </button>
+    </div>
+</div>
 </body>
 </html>
