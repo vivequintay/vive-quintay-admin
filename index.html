@@ -77,7 +77,7 @@
     <div class="card">
         <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
         <div id="lista-cierres" class="text-xs space-y-3">
-            <p class="text-gray-500 italic text-center text-xs">Sin datos históricos aún</p>
+            <p class="text-gray-500 italic text-center text-xs">Cargando historial...</p>
         </div>
     </div>
 
@@ -93,6 +93,47 @@
                 ACCEDER AL PANEL
             </button>
             <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden font-bold">PIN INCORRECTO</p>
+        </div>
+    </div>
+
+    <div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
+        <div class="bg-[#0D3B5C] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/10 modal-anim">
+            <div class="p-6 border-b border-white/5 flex justify-between items-center bg-[#0A2F4F]">
+                <div>
+                    <h3 id="modal-fecha" class="text-xl font-bold text-[#00E0D0]">--/--/--</h3>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-widest">Resumen de Jornada</p>
+                </div>
+                <button onclick="cerrarModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="glass p-3">
+                        <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
+                        <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
+                    </div>
+                    <div class="glass p-3">
+                        <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
+                        <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
+                    </div>
+                </div>
+                <div class="space-y-2 pt-2">
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-400">Tickets por Minuto:</span>
+                        <span id="modal-minutos" class="font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between text-sm">
+                        <span class="text-gray-400">Pases Diarios:</span>
+                        <span id="modal-pases" class="font-bold">0</span>
+                    </div>
+                    <div class="flex justify-between text-sm border-t border-white/5 pt-2">
+                        <span class="text-[#00E0D0] font-bold">Total Recaudado:</span>
+                        <span id="modal-total" class="text-[#00E0D0] font-bold text-lg">$0</span>
+                    </div>
+                </div>
+            </div>
+            <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-colors">
+                CERRAR DETALLE
+            </button>
         </div>
     </div>
 
@@ -116,7 +157,7 @@
     let chartPagos;
     let chartSemanal;
 
-    // --- ACCESO CORREGIDO ---
+    // --- SEGURIDAD ---
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
         const errorMsg = document.getElementById('error-pass');
@@ -135,45 +176,25 @@
         }
     }
 
-    // --- INICIAR ESCUCHAS (DATOS) ---
+    // --- ESCUCHA DE DATOS EN TIEMPO REAL ---
     function iniciarEscuchas() {
+        // Stats del día actual
         onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
-                
-                // Actualizar números superiores
                 document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
                 document.getElementById('cant-hoy').innerText = (d.cant_pases || 0) + (d.cant_minutos || 0);
-                
-                // Desglose
                 document.getElementById('num-minutos').innerText = `${d.cant_minutos || 0} vh`;
                 document.getElementById('num-pases').innerText = `${d.cant_pases || 0} vh`;
                 document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
                 document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
-
                 document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
-
                 actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
             }
         });
 
-
-
-    // --- GRÁFICOS ---
-    function actualizarGraficoPagos(ef, tj) {
-        const ctx = document.getElementById('chartPagos').getContext('2d');
-        if (chartPagos) chartPagos.destroy();
-        chartPagos = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Efectivo', 'Tarjeta'],
-                datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }]
-            },
-            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF' } } } }
-        });
-    }
-// --- HISTORIAL (MODIFICADO PARA MODAL) ---
+        // Historial de cierres
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -182,9 +203,7 @@
                 labels.push(d.fecha);
                 montos.push(d.total_recaudado);
                 
-                // Convertimos el objeto a una cadena segura (Base64) para evitar errores de comillas
                 const dataEncoded = btoa(JSON.stringify(d));
-                
                 html += `
                     <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
                         <div class="flex flex-col">
@@ -199,73 +218,20 @@
         });
     }
 
-    // --- FUNCIONES DEL MODAL (GLOBALES) ---
-    window.abrirModal = function(dataEncoded) {
-        // Decodificamos los datos
-        const data = JSON.parse(atob(dataEncoded));
-        
-        document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
-        document.getElementById('modal-efectivo').innerText = `$${(data.efectivo || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-tarjeta').innerText = `$${(data.tarjeta || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-minutos').innerText = data.cant_minutos || 0;
-        document.getElementById('modal-pases').innerText = data.cant_pases || 0;
-        document.getElementById('modal-total').innerText = `$${(data.total_recaudado || 0).toLocaleString('es-CL')}`;
-        
-        document.getElementById('modal-detalle').classList.remove('hidden');
+    // --- LÓGICA DE GRÁFICOS ---
+    function actualizarGraficoPagos(ef, tj) {
+        const ctx = document.getElementById('chartPagos').getContext('2d');
+        if (chartPagos) chartPagos.destroy();
+        chartPagos = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Efectivo', 'Tarjeta'],
+                datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }]
+            },
+            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF' } } } }
+        });
     }
 
-    window.cerrarModal = function() {
-        document.getElementById('modal-detalle').classList.add('hidden');
-    }
-
-    // Eventos
-    document.getElementById('btn-entrar').onclick = verificarClave;
-    if (sessionStorage.getItem('autenticado_admin') === 'true') {
-        document.getElementById('pantalla-bloqueo').style.display = 'none';
-        iniciarEscuchas();
-    }
-</script>
-
-<div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-[#0D3B5C] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/10 modal-anim">
-        <div class="p-6 border-b border-white/5 flex justify-between items-center bg-[#0A2F4F]">
-            <div>
-                <h3 id="modal-fecha" class="text-xl font-bold text-[#00E0D0]">--/--/--</h3>
-                <p class="text-[10px] text-gray-400 uppercase tracking-widest">Resumen de Jornada</p>
-            </div>
-            <button onclick="cerrarModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-        </div>
-        <div class="p-6 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-                <div class="glass p-3">
-                    <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
-                    <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
-                </div>
-                <div class="glass p-3">
-                    <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
-                    <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
-                </div>
-            </div>
-            <div class="space-y-2 pt-2">
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Tickets por Minuto:</span>
-                    <span id="modal-minutos" class="font-bold">0</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Pases Diarios:</span>
-                    <span id="modal-pases" class="font-bold">0</span>
-                </div>
-                <div class="flex justify-between text-sm border-t border-white/5 pt-2">
-                    <span class="text-[#00E0D0] font-bold">Total Recaudado:</span>
-                    <span id="modal-total" class="text-[#00E0D0] font-bold text-lg">$0</span>
-                </div>
-            </div>
-        </div>
-        <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-colors">
-            CERRAR DETALLE
-        </button>
-    </div>
-</div>
     function actualizarGraficoSemanal(labels, montos) {
         const ctx = document.getElementById('chartSemanal').getContext('2d');
         if (chartSemanal) chartSemanal.destroy();
@@ -279,52 +245,28 @@
         });
     }
 
-    // Eventos
+    // --- FUNCIONES GLOBALES PARA EL MODAL ---
+    window.abrirModal = function(dataEncoded) {
+        const data = JSON.parse(atob(dataEncoded));
+        document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
+        document.getElementById('modal-efectivo').innerText = `$${(data.efectivo || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-tarjeta').innerText = `$${(data.tarjeta || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-minutos').innerText = data.cant_minutos || 0;
+        document.getElementById('modal-pases').innerText = data.cant_pases || 0;
+        document.getElementById('modal-total').innerText = `$${(data.total_recaudado || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-detalle').classList.remove('hidden');
+    }
+
+    window.cerrarModal = function() {
+        document.getElementById('modal-detalle').classList.add('hidden');
+    }
+
+    // Iniciar
     document.getElementById('btn-entrar').onclick = verificarClave;
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
         iniciarEscuchas();
     }
 </script>
-    <div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="bg-[#0D3B5C] w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-white/10 modal-anim">
-        <div class="p-6 border-b border-white/5 flex justify-between items-center bg-[#0A2F4F]">
-            <div>
-                <h3 id="modal-fecha" class="text-xl font-bold text-[#00E0D0]">--/--/--</h3>
-                <p class="text-[10px] text-gray-400 uppercase tracking-widest">Resumen de Jornada</p>
-            </div>
-            <button onclick="cerrarModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
-        </div>
-        <div class="p-6 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
-                <div class="glass p-3">
-                    <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
-                    <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
-                </div>
-                <div class="glass p-3">
-                    <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
-                    <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
-                </div>
-            </div>
-            <div class="space-y-2 pt-2">
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Tickets por Minuto:</span>
-                    <span id="modal-minutos" class="font-bold">0</span>
-                </div>
-                <div class="flex justify-between text-sm">
-                    <span class="text-gray-400">Pases Diarios:</span>
-                    <span id="modal-pases" class="font-bold">0</span>
-                </div>
-                <div class="flex justify-between text-sm border-t border-white/5 pt-2">
-                    <span class="text-[#00E0D0] font-bold">Total Recaudado:</span>
-                    <span id="modal-total" class="text-[#00E0D0] font-bold text-lg">$0</span>
-                </div>
-            </div>
-        </div>
-        <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-colors">
-            CERRAR DETALLE
-        </button>
-    </div>
-</div>
 </body>
 </html>
