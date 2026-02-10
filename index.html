@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vive Quintay ADMIN</title>
+    <title>Vive Quintay ADMIN - Premium</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0A2F4F">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -14,83 +14,84 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { background-color: #0A2F4F; color: white; }
-        .card { background-color: #0D3B5C; border-radius: 15px; padding: 20px; margin-bottom: 20px; border: 1px solid #1B263B; }
+        .card { background-color: #0D3B5C; border-radius: 18px; padding: 20px; margin-bottom: 16px; border: 1px solid #1B263B; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
     </style>
 </head>
-<body class="p-4 font-sans">
+<body class="p-4 font-sans mb-10">
 
     <header class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-[#00E0D0]">VIVE QUINTAY</h1>
-            <p class="text-gray-400 text-sm">Panel Administrativo</p>
+            <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight">VIVE QUINTAY</h1>
+            <p class="text-gray-400 text-[10px] uppercase tracking-widest">Business Intelligence</p>
         </div>
-        <div class="bg-[#1B263B] p-2 rounded-lg text-center">
-            <span id="fecha-actual" class="text-xs block">--/--/--</span>
-            <span id="hora-sincro" class="text-[10px] text-[#00E0D0] block">Esperando datos...</span>
+        <div class="text-right">
+            <span id="fecha-actual" class="text-xs font-semibold block text-white">--/--/--</span>
+            <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando...</span>
         </div>
     </header>
 
     <div class="grid grid-cols-2 gap-4 mb-4">
         <div class="card flex flex-col items-center border-t-4 border-[#00C853]">
-            <span class="text-gray-400 text-[10px] uppercase tracking-widest">Total Recaudado</span>
-            <span id="total-hoy" class="text-3xl font-bold text-white">$0</span>
+            <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Ingresos</span>
+            <span id="total-hoy" class="text-2xl font-black text-white">$0</span>
         </div>
         <div class="card flex flex-col items-center border-t-4 border-[#FFD700]">
-            <span class="text-gray-400 text-[10px] uppercase tracking-widest">Flujo Vehicular</span>
-            <span id="cant-hoy" class="text-3xl font-bold text-white">0</span>
+            <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Flujo Autos</span>
+            <span id="cant-hoy" class="text-2xl font-black text-white">0</span>
         </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-4 mb-6">
-        <div class="bg-[#10446A] p-4 rounded-xl border border-gray-700">
-            <div class="flex justify-between items-center mb-1">
-                <span class="text-[#FF6B35] text-[10px] font-bold">POR MINUTO</span>
-                <span id="num-minutos" class="text-xs text-white">0</span>
+    <div class="grid grid-cols-2 gap-3 mb-6">
+        <div class="glass p-3 flex flex-col">
+            <span class="text-[#FF6B35] text-[9px] font-black uppercase mb-1">Tickets Minuto</span>
+            <div class="flex justify-between items-end">
+                <span id="dinero-minutos" class="text-lg font-bold text-white">$0</span>
+                <span id="num-minutos" class="text-[10px] text-gray-400">0 vh</span>
             </div>
-            <span id="dinero-minutos" class="text-lg font-semibold text-white">$0</span>
         </div>
-        <div class="bg-[#10446A] p-4 rounded-xl border border-gray-700">
-            <div class="flex justify-between items-center mb-1">
-                <span class="text-[#00C853] text-[10px] font-bold">PASES DIARIOS</span>
-                <span id="num-pases" class="text-xs text-white">0</span>
+        <div class="glass p-3 flex flex-col">
+            <span class="text-[#00C853] text-[9px] font-black uppercase mb-1">Pases Diarios</span>
+            <div class="flex justify-between items-end">
+                <span id="dinero-pases" class="text-lg font-bold text-white">$0</span>
+                <span id="num-pases" class="text-[10px] text-gray-400">0 vh</span>
             </div>
-            <span id="dinero-pases" class="text-lg font-semibold text-white">$0</span>
         </div>
     </div>
+
     <div class="card">
-        <h2 class="text-center mb-4 font-semibold text-xs text-gray-400 uppercase">Distribución de Pagos (Hoy)</h2>
-        <canvas id="chartPagos" style="max-height: 200px;"></canvas>
+        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos</h2>
+        <canvas id="chartPagos" style="max-height: 180px;"></canvas>
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 font-semibold text-xs text-gray-400 uppercase">Ingresos Últimos 7 Días</h2>
-        <canvas id="chartSemanal" style="max-height: 200px;"></canvas>
+        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Últimos 7 Días</h2>
+        <canvas id="chartSemanal" style="max-height: 180px;"></canvas>
     </div>
 
     <div class="card">
-        <h2 class="mb-4 font-semibold text-xs text-gray-400 uppercase">Historial de Cierres</h2>
-        <div id="lista-cierres" class="text-sm space-y-3">
-            <p class="text-gray-500 italic">Cargando Firebase...</p>
+        <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Historial de Cierres</h2>
+        <div id="lista-cierres" class="text-xs space-y-3">
+            <p class="text-gray-500 italic text-center">Sin datos históricos aún</p>
         </div>
     </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
         <div class="mb-8 text-center">
-            <h1 class="text-3xl font-bold text-[#00E0D0] mb-2">VIVE QUINTAY</h1>
-            <p class="text-gray-400">Acceso Administrativo</p>
+            <h1 class="text-4xl font-black text-[#00E0D0] mb-2 italic">VIVE QUINTAY</h1>
+            <p class="text-gray-400 tracking-[0.3em] text-xs">ADMINISTRACIÓN</p>
         </div>
         <div class="w-full max-w-xs">
-            <input type="password" id="input-pass" placeholder="Ingresa PIN" 
-                class="w-full p-4 rounded-xl bg-[#1B263B] border border-[#00E0D0] text-white text-center text-2xl mb-4 focus:outline-none">
-            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-bold rounded-xl active:scale-95 transition-transform">
-                ENTRAR
+            <input type="password" id="input-pass" placeholder="PIN ACCESO" 
+                class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
+            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform shadow-lg shadow-[#00E0D0]/20">
+                ACCEDER AL PANEL
             </button>
-            <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden">Clave incorrecta</p>
+            <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden font-bold">PIN INCORRECTO</p>
         </div>
     </div>
 
 <script type="module">
-    // 1. Configuración de Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k",
         authDomain: "vive-quintay-spa.firebaseapp.com",
@@ -107,55 +108,51 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    // Variables globales para los gráficos
     let chartPagos;
     let chartSemanal;
 
-    // --- FUNCIÓN: ESCUCHA DE DATOS HOY (TIEMPO REAL) ---
-    function iniciarEscuchaDashboard() {
-        // Escuchamos el documento que el Python actualiza cada 2 horas
+    function iniciarEscuchas() {
+        // 1. Datos del Día
         onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
             if (docSnap.exists()) {
-                const data = docSnap.data();
+                const d = docSnap.data();
                 
-                // Actualizar números superiores
-                document.getElementById('total-hoy').innerText = `$${data.total_hoy.toLocaleString('es-CL')}`;
-                document.getElementById('cant-hoy').innerText = (data.cant_pases + data.cant_minutos);
-                document.getElementById('hora-sincro').innerText = `Sincro: ${data.ultima_actualizacion}`;
-                document.getElementById('fecha-actual').innerText = data.fecha_dato || new Date().toLocaleDateString('es-CL');
+                // Animación simple de números (opcional)
+                document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
+                document.getElementById('cant-hoy').innerText = (d.cant_pases + d.cant_minutos) || 0;
+                
+                // Desglose
+                document.getElementById('num-minutos').innerText = `${d.cant_minutos || 0} vh`;
+                document.getElementById('num-pases').innerText = `${d.cant_pases || 0} vh`;
+                document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
+                document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
 
-                // Actualizar Gráfico de Dona (Efectivo vs Tarjeta)
-                actualizarGraficoPagos(data.efectivo, data.tarjeta);
+                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion}`;
+                document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
+
+                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
             }
         });
-    }
 
-    // --- FUNCIÓN: CARGAR HISTÓRICO (ÚLTIMOS 7 DÍAS) ---
-    function iniciarEscuchaHistoricos() {
+        // 2. Históricos (Gráfico 7 días)
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(7));
-        
         onSnapshot(q, (snapshot) => {
-            let labels = [];
-            let montos = [];
-            let html = "";
-
+            let labels = []; let montos = []; let html = "";
             snapshot.forEach((doc) => {
                 const d = doc.data();
                 labels.push(d.fecha);
                 montos.push(d.total_recaudado);
                 html += `
-                    <div class="flex justify-between border-b border-gray-800 pb-2">
-                        <span>${d.fecha}</span>
+                    <div class="flex justify-between items-center glass p-2 px-4">
+                        <span class="text-gray-300 font-medium">${d.fecha}</span>
                         <span class="font-bold text-[#00C853]">$${d.total_recaudado.toLocaleString('es-CL')}</span>
                     </div>`;
             });
-
-            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres registrados";
+            document.getElementById('lista-cierres').innerHTML = html || "Esperando primer cierre...";
             actualizarGraficoSemanal(labels.reverse(), montos.reverse());
         });
     }
 
-    // --- LÓGICA DE GRÁFICOS (CHART.JS) ---
     function actualizarGraficoPagos(efectivo, tarjeta) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
@@ -166,10 +163,10 @@
                 datasets: [{
                     data: [efectivo, tarjeta],
                     backgroundColor: ['#00C853', '#00E0D0'],
-                    borderWidth: 0
+                    borderWidth: 0, hoverOffset: 4
                 }]
             },
-            options: { cutout: '70%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', font: { size: 10 } } } } }
+            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF', font: { size: 10, weight: 'bold' } } } } }
         });
     }
 
@@ -181,9 +178,10 @@
             data: {
                 labels: labels,
                 datasets: [{
-                    label: 'Ingresos',
                     data: montos,
                     borderColor: '#00E0D0',
+                    borderWidth: 3,
+                    pointBackgroundColor: '#00E0D0',
                     backgroundColor: 'rgba(0, 224, 208, 0.1)',
                     fill: true,
                     tension: 0.4
@@ -193,53 +191,31 @@
                 plugins: { legend: { display: false } },
                 scales: { 
                     y: { display: false },
-                    x: { ticks: { color: '#9CA3AF', font: { size: 9 } }, grid: { display: false } }
+                    x: { ticks: { color: '#6B7280', font: { size: 8 } }, grid: { display: false } }
                 }
             }
         });
     }
 
-    // --- SEGURIDAD: VERIFICACIÓN DE PIN ---
     async function verificarClave() {
-        const passIngresada = document.getElementById('input-pass').value;
+        const pass = document.getElementById('input-pass').value;
         const errorMsg = document.getElementById('error-pass');
-        
         try {
-            const docRef = doc(db, "configuracion", "seguridad");
-            const docSnap = await getDoc(docRef);
-
-            if (docSnap.exists() && passIngresada === docSnap.data().pin.toString()) {
+            const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
+            if (docSnap.exists() && pass === docSnap.data().pin.toString()) {
                 document.getElementById('pantalla-bloqueo').style.display = 'none';
                 sessionStorage.setItem('autenticado_admin', 'true');
-                // Al entrar con éxito, activamos las escuchas de datos
-                iniciarEscuchaDashboard();
-                iniciarEscuchaHistoricos();
+                iniciarEscuchas();
             } else {
                 errorMsg.classList.remove('hidden');
-                errorMsg.innerText = "PIN Incorrecto";
             }
-        } catch (e) {
-            console.error(e);
-            errorMsg.classList.remove('hidden');
-            errorMsg.innerText = "Error de conexión con Firebase";
-        }
+        } catch (e) { console.error(e); }
     }
 
-    // Eventos de botones
     document.getElementById('btn-entrar').onclick = verificarClave;
-    
-    // Si ya estaba autenticado
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
-        iniciarEscuchaDashboard();
-        iniciarEscuchaHistoricos();
-    }
-
-    // Service Worker
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('sw.js').catch(err => console.log('SW fail', err));
-        });
+        iniciarEscuchas();
     }
 </script>
 </body>
