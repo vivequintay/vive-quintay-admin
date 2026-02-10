@@ -16,7 +16,6 @@
         body { background-color: #0A2F4F; color: white; }
         .card { background-color: #0D3B5C; border-radius: 18px; padding: 20px; margin-bottom: 16px; border: 1px solid #1B263B; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
-        /* Animación para el modal */
         @keyframes fadeInScale {
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
@@ -118,11 +117,8 @@
     let chartPagos;
     let chartSemanal;
 
-    // --- FUNCIÓN GLOBAL ACTUALIZADA: INCLUYE TOTAL VEHÍCULOS ---
     window.verDetalleCierre = function(fecha, total, ef, tj, ps, mn) {
-        // Cálculo del total de vehículos atendidos
         const totalVehiculos = (ps || 0) + (mn || 0);
-
         const modalHTML = `
             <div id="modal-detalle" class="fixed inset-0 z-[200] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
                 <div class="card w-full max-w-xs border-t-4 border-[#00E0D0] modal-anim">
@@ -133,18 +129,15 @@
                         </div>
                         <button onclick="document.getElementById('modal-detalle').remove()" class="text-white text-3xl font-light">&times;</button>
                     </div>
-                    
                     <div class="space-y-4 text-left">
                         <div class="flex justify-between items-center border-b border-gray-700 pb-2">
                             <span class="text-gray-400 text-[10px] font-bold uppercase tracking-tighter">Recaudación Total</span>
                             <span class="font-black text-white text-lg">$${total.toLocaleString('es-CL')}</span>
                         </div>
-
                         <div class="flex justify-between items-center bg-[#1B263B] p-3 rounded-xl border border-[#00E0D0]/30 shadow-inner">
                             <span class="text-[#00E0D0] text-[10px] font-black uppercase tracking-widest">Total Vehículos</span>
                             <span class="font-black text-white text-lg">${totalVehiculos} <span class="text-[10px] font-normal text-gray-400">vh</span></span>
                         </div>
-
                         <div class="grid grid-cols-2 gap-3">
                             <div class="bg-[#10446A] p-3 rounded-xl border border-gray-700">
                                 <p class="text-[9px] text-[#00C853] font-black uppercase mb-1 text-center">Efectivo</p>
@@ -155,7 +148,6 @@
                                 <p class="text-sm font-bold text-center text-white">$${(tj || 0).toLocaleString('es-CL')}</p>
                             </div>
                         </div>
-
                         <div class="glass p-3 flex justify-between items-center">
                             <span class="text-[10px] text-gray-400 font-bold uppercase tracking-tight">Pases Diarios:</span>
                             <span class="text-white font-bold">${ps || 0} vh</span>
@@ -165,7 +157,6 @@
                             <span class="text-white font-bold">${mn || 0} vh</span>
                         </div>
                     </div>
-                    
                     <button onclick="document.getElementById('modal-detalle').remove()" 
                         class="w-full mt-6 p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-xl active:scale-95 transition-transform shadow-lg shadow-[#00E0D0]/20">
                         CERRAR VISTA
@@ -177,26 +168,36 @@
     }
 
     function iniciarEscuchas() {
-        // 1. Datos del Día (Panel Superior)
+        // --- MODIFICACIÓN DE SEGURIDAD ---
         onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
-                document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
-                document.getElementById('cant-hoy').innerText = (d.cant_pases + d.cant_minutos) || 0;
                 
-                document.getElementById('num-minutos').innerText = `${d.cant_minutos || 0} vh`;
-                document.getElementById('num-pases').innerText = `${d.cant_pases || 0} vh`;
-                document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
-                document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
+                // Forzamos conversión numérica para evitar errores de tipo texto
+                const totalCalculado = parseInt(d.total_hoy) || 0;
+                const pases = parseInt(d.cant_pases) || 0;
+                const minutos = parseInt(d.cant_minutos) || 0;
+                const dineroPases = parseInt(d.dinero_pases) || 0;
+                const dineroMinutos = parseInt(d.dinero_minutos) || 0;
+                const efectivo = parseInt(d.efectivo) || 0;
+                const tarjeta = parseInt(d.tarjeta) || 0;
 
-                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion}`;
+                // Actualizamos el DOM con los IDs correctos
+                document.getElementById('total-hoy').innerText = `$${totalCalculado.toLocaleString('es-CL')}`;
+                document.getElementById('cant-hoy').innerText = pases + minutos;
+                
+                document.getElementById('num-minutos').innerText = `${minutos} vh`;
+                document.getElementById('num-pases').innerText = `${pases} vh`;
+                document.getElementById('dinero-minutos').innerText = `$${dineroMinutos.toLocaleString('es-CL')}`;
+                document.getElementById('dinero-pases').innerText = `$${dineroPases.toLocaleString('es-CL')}`;
+
+                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
 
-                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
+                actualizarGraficoPagos(efectivo, tarjeta);
             }
         });
 
-        // 2. Históricos (Gráficos e Historial Inferior)
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -250,42 +251,3 @@
                     borderWidth: 3,
                     pointBackgroundColor: '#00E0D0',
                     pointRadius: 4,
-                    pointHoverRadius: 6,
-                    backgroundColor: 'rgba(0, 224, 208, 0.1)',
-                    fill: true,
-                    tension: 0.4
-                }]
-            },
-            options: { 
-                plugins: { legend: { display: false } },
-                scales: { 
-                    y: { display: false },
-                    x: { ticks: { color: '#6B7280', font: { size: 8 } }, grid: { display: false } }
-                }
-            }
-        });
-    }
-
-    async function verificarClave() {
-        const pass = document.getElementById('input-pass').value;
-        const errorMsg = document.getElementById('error-pass');
-        try {
-            const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
-            if (docSnap.exists() && pass === docSnap.data().pin.toString()) {
-                document.getElementById('pantalla-bloqueo').style.display = 'none';
-                sessionStorage.setItem('autenticado_admin', 'true');
-                iniciarEscuchas();
-            } else {
-                errorMsg.classList.remove('hidden');
-            }
-        } catch (e) { console.error(e); }
-    }
-
-    document.getElementById('btn-entrar').onclick = verificarClave;
-    if (sessionStorage.getItem('autenticado_admin') === 'true') {
-        document.getElementById('pantalla-bloqueo').style.display = 'none';
-        iniciarEscuchas();
-    }
-</script>
-</body>
-</html>
