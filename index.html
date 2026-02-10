@@ -246,14 +246,23 @@
     }
 
     // --- FUNCIONES GLOBALES PARA EL MODAL ---
-    window.abrirModal = function(dataEncoded) {
+    
+window.abrirModal = function(dataEncoded) {
         const data = JSON.parse(atob(dataEncoded));
+        
         document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
+        
+        // Dinero
         document.getElementById('modal-efectivo').innerText = `$${(data.efectivo || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(data.tarjeta || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-minutos').innerText = data.cant_minutos || 0;
-        document.getElementById('modal-pases').innerText = data.cant_pases || 0;
+        
+        // Cantidades (Doble verificación: intenta con el nombre nuevo y el que usa tu Python actual)
+        // Esto hará que lea tanto "cant_pases" como "pases"
+        document.getElementById('modal-pases').innerText = data.cant_pases || data.pases || 0;
+        document.getElementById('modal-minutos').innerText = data.cant_minutos || data.minutos || 0;
+        
         document.getElementById('modal-total').innerText = `$${(data.total_recaudado || 0).toLocaleString('es-CL')}`;
+        
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
 
