@@ -107,13 +107,13 @@
             </div>
             <div class="p-6 space-y-4">
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="glass p-3">
-                        <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
-                        <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
+                    <div class="glass p-3 text-center">
+                        <p class="text-[9px] text-gray-400 uppercase mb-1">Efectivo</p>
+                        <p id="modal-efectivo" class="text-lg font-bold text-[#00C853]">$0</p>
                     </div>
-                    <div class="glass p-3">
-                        <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
-                        <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
+                    <div class="glass p-3 text-center">
+                        <p class="text-[9px] text-gray-400 uppercase mb-1">Tarjeta</p>
+                        <p id="modal-tarjeta" class="text-lg font-bold text-[#00E0D0]">$0</p>
                     </div>
                 </div>
                 <div class="space-y-2 pt-2">
@@ -157,7 +157,6 @@
     let chartPagos;
     let chartSemanal;
 
-    // --- SEGURIDAD ---
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
         const errorMsg = document.getElementById('error-pass');
@@ -176,9 +175,8 @@
         }
     }
 
-    // --- ESCUCHA DE DATOS EN TIEMPO REAL ---
     function iniciarEscuchas() {
-        // Stats del día actual
+        // Dashboard Tiempo Real
         onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
@@ -190,11 +188,13 @@
                 document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
                 document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
-                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
+                
+                // CORRECCIÓN: Forzamos la actualización del gráfico con números reales
+                actualizarGraficoPagos(Number(d.efectivo || 0), Number(d.tarjeta || 0));
             }
         });
 
-        // Historial de cierres
+        // Historial
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -218,17 +218,34 @@
         });
     }
 
-    // --- LÓGICA DE GRÁFICOS ---
     function actualizarGraficoPagos(ef, tj) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
+        
+        // CORRECCIÓN: Manejo de estado vacío para evitar que el gráfico no cargue
+        const total = ef + tj;
+        const dataValues = total > 0 ? [ef, tj] : [1, 0.0001];
+        const colores = total > 0 ? ['#00C853', '#00E0D0'] : ['#1B263B', '#1B263B'];
+
         chartPagos = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Efectivo', 'Tarjeta'],
-                datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }]
+                datasets: [{ 
+                    data: dataValues, 
+                    backgroundColor: colores, 
+                    borderWidth: 0 
+                }]
             },
-            options: { cutout: '75%', plugins: { legend: { position: 'bottom', labels: { color: '#9CA3AF' } } } }
+            options: { 
+                cutout: '75%', 
+                plugins: { 
+                    legend: { 
+                        position: 'bottom', 
+                        labels: { color: '#9CA3AF', font: { size: 11 } } 
+                    } 
+                } 
+            }
         });
     }
 
@@ -241,27 +258,25 @@
                 labels: labels,
                 datasets: [{ data: montos, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.1)' }]
             },
-            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280' } } } }
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
         });
     }
 
-    // --- FUNCIONES GLOBALES PARA EL MODAL ---
-    
-window.abrirModal = function(dataEncoded) {
+    // FUNCIONES GLOBALES CORREGIDAS PARA EL MODAL
+    window.abrirModal = function(dataEncoded) {
         const data = JSON.parse(atob(dataEncoded));
         
         document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
         
-        // Dinero
-        document.getElementById('modal-efectivo').innerText = `$${(data.efectivo || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-tarjeta').innerText = `$${(data.tarjeta || 0).toLocaleString('es-CL')}`;
+        // CORRECCIÓN: Leer montos asegurando que sean números y formateados
+        document.getElementById('modal-efectivo').innerText = `$${(Number(data.efectivo) || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-tarjeta').innerText = `$${(Number(data.tarjeta) || 0).toLocaleString('es-CL')}`;
         
-        // Cantidades (Doble verificación: intenta con el nombre nuevo y el que usa tu Python actual)
-        // Esto hará que lea tanto "cant_pases" como "pases"
+        // CORRECCIÓN: Compatibilidad con nombres de variables (cant_pases vs pases)
         document.getElementById('modal-pases').innerText = data.cant_pases || data.pases || 0;
         document.getElementById('modal-minutos').innerText = data.cant_minutos || data.minutos || 0;
         
-        document.getElementById('modal-total').innerText = `$${(data.total_recaudado || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-total').innerText = `$${(Number(data.total_recaudado) || 0).toLocaleString('es-CL')}`;
         
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
@@ -270,7 +285,6 @@ window.abrirModal = function(dataEncoded) {
         document.getElementById('modal-detalle').classList.add('hidden');
     }
 
-    // Iniciar
     document.getElementById('btn-entrar').onclick = verificarClave;
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
