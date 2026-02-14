@@ -66,7 +66,21 @@
 
     <div class="card">
         <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos</h2>
-        <canvas id="chartPagos" style="max-height: 180px;"></canvas>
+        <div class="flex items-center justify-between gap-2">
+            <div class="w-[45%]">
+                <canvas id="chartPagos" style="max-height: 140px;"></canvas>
+            </div>
+            <div class="w-[55%] space-y-4 pl-2">
+                <div class="flex flex-col border-l-4 border-[#00C853] pl-3">
+                    <span class="text-[9px] text-gray-400 uppercase font-black">Efectivo</span>
+                    <span id="cifra-efectivo" class="text-xl font-black text-white leading-tight">$0</span>
+                </div>
+                <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3">
+                    <span class="text-[9px] text-gray-400 uppercase font-black">Tarjeta</span>
+                    <span id="cifra-tarjeta" class="text-xl font-black text-white leading-tight">$0</span>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="card">
@@ -87,10 +101,10 @@
             <p class="text-gray-400 tracking-[0.3em] text-xs">ADMINISTRACIÓN</p>
         </div>
         <div class="w-full max-w-xs">
-            <input type="password" id="input-pass" placeholder="PIN ACCESO" 
+            <input type="password" id="input-pass" placeholder="PIN" 
                 class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
             <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform shadow-lg shadow-[#00E0D0]/20">
-                ACCEDER AL PANEL
+                ACCEDER
             </button>
             <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden font-bold">PIN INCORRECTO</p>
         </div>
@@ -101,39 +115,26 @@
             <div class="p-6 border-b border-white/5 flex justify-between items-center bg-[#0A2F4F]">
                 <div>
                     <h3 id="modal-fecha" class="text-xl font-bold text-[#00E0D0]">--/--/--</h3>
-                    <p class="text-[10px] text-gray-400 uppercase tracking-widest">Resumen de Jornada</p>
                 </div>
                 <button onclick="cerrarModal()" class="text-gray-400 hover:text-white text-2xl">&times;</button>
             </div>
-            <div class="p-6 space-y-4">
+            <div class="p-6 space-y-4 text-center">
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="glass p-3 text-center">
-                        <p class="text-[9px] text-gray-400 uppercase mb-1">Efectivo</p>
+                    <div class="glass p-3">
+                        <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
                         <p id="modal-efectivo" class="text-lg font-bold text-[#00C853]">$0</p>
                     </div>
-                    <div class="glass p-3 text-center">
-                        <p class="text-[9px] text-gray-400 uppercase mb-1">Tarjeta</p>
+                    <div class="glass p-3">
+                        <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
                         <p id="modal-tarjeta" class="text-lg font-bold text-[#00E0D0]">$0</p>
                     </div>
                 </div>
-                <div class="space-y-2 pt-2">
-                    <div class="flex justify-between text-sm">
-                        <span class="text-gray-400">Tickets por Minuto:</span>
-                        <span id="modal-minutos" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between text-sm">
-                        <span class="text-gray-400">Pases Diarios:</span>
-                        <span id="modal-pases" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between text-sm border-t border-white/5 pt-2">
-                        <span class="text-[#00E0D0] font-bold">Total Recaudado:</span>
-                        <span id="modal-total" class="text-[#00E0D0] font-bold text-lg">$0</span>
-                    </div>
+                <div class="flex justify-between text-[#00E0D0] font-bold text-lg pt-2 border-t border-white/5">
+                    <span>Total Recaudado:</span>
+                    <span id="modal-total">$0</span>
                 </div>
             </div>
-            <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 hover:bg-white/10 text-gray-300 font-bold transition-colors">
-                CERRAR DETALLE
-            </button>
+            <button onclick="cerrarModal()" class="w-full p-4 bg-white/5 text-gray-300 font-bold">CERRAR</button>
         </div>
     </div>
 
@@ -157,37 +158,25 @@
     let chartPagos;
     let chartSemanal;
 
-    // Función de Login
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
-        const errorMsg = document.getElementById('error-pass');
-        try {
-            const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
-            if (docSnap.exists() && pass.toString() === docSnap.data().pin.toString()) {
-                document.getElementById('pantalla-bloqueo').style.display = 'none';
-                sessionStorage.setItem('autenticado_admin', 'true');
-                iniciarEscuchas();
-            } else {
-                errorMsg.classList.remove('hidden');
-            }
-        } catch (e) { 
-            console.error(e);
-            alert("Error de conexión con Firebase");
+        const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
+        if (docSnap.exists() && pass.toString() === docSnap.data().pin.toString()) {
+            document.getElementById('pantalla-bloqueo').style.display = 'none';
+            sessionStorage.setItem('autenticado_admin', 'true');
+            iniciarEscuchas();
+        } else {
+            document.getElementById('error-pass').classList.remove('hidden');
         }
     }
 
-    // Función Principal de Datos
     function iniciarEscuchas() {
-        // 1. Calcular Fecha de Hoy para buscar el documento correcto
         const ahora = new Date();
         const dia = String(ahora.getDate()).padStart(2, '0');
         const mes = String(ahora.getMonth() + 1).padStart(2, '0');
         const anio = ahora.getFullYear();
         const fechaDoc = `${dia}-${mes}-${anio}`;
 
-        console.log("Iniciando escucha para el documento:", fechaDoc);
-
-        // 2. Escucha en Tiempo Real del Dashboard
         onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
@@ -199,14 +188,15 @@
                 document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
                 document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
+
+                // Actualizar cifras laterales
+                document.getElementById('cifra-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
+                document.getElementById('cifra-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
                 
                 actualizarGraficoPagos(Number(d.efectivo || 0), Number(d.tarjeta || 0));
-            } else {
-                console.log("No hay datos para hoy todavía.");
             }
         });
 
-        // 3. Escucha del Historial de Cierres
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -214,104 +204,50 @@
                 const d = doc.data();
                 labels.push(d.fecha);
                 montos.push(d.total_recaudado);
-                
                 const dataEncoded = btoa(JSON.stringify(d));
-                html += `
-                    <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
-                        <div class="flex flex-col">
-                            <span class="text-white font-medium">${d.fecha}</span>
-                            <span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter">Click para detalle</span>
-                        </div>
-                        <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
-                    </div>`;
+                html += `<div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
+                    <div class="flex flex-col"><span class="text-white font-medium">${d.fecha}</span><span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter">Click detalle</span></div>
+                    <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
+                </div>`;
             });
-            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres registrados";
+            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
             actualizarGraficoSemanal(labels.reverse(), montos.reverse());
         });
     }
 
-    // Gráfico de Dona (Efectivo vs Tarjeta)
     function actualizarGraficoPagos(ef, tj) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
-        
         const total = ef + tj;
         const dataValues = total > 0 ? [ef, tj] : [1, 0];
-        const colores = total > 0 ? ['#00C853', '#00E0D0'] : ['#1B263B', '#1B263B'];
-
         chartPagos = new Chart(ctx, {
             type: 'doughnut',
-            data: {
-                labels: ['Efectivo', 'Tarjeta'],
-                datasets: [{ 
-                    data: dataValues, 
-                    backgroundColor: colores, 
-                    borderWidth: 0 
-                }]
-            },
-            options: { 
-                cutout: '75%', 
-                plugins: { 
-                    legend: { 
-                        position: 'bottom', 
-                        labels: { color: '#9CA3AF', font: { size: 11 } } 
-                    } 
-                } 
-            }
+            data: { datasets: [{ data: dataValues, backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }] },
+            options: { cutout: '75%', plugins: { legend: { display: false } }, maintainAspectRatio: false }
         });
     }
 
-    // Gráfico de Línea (Semanal)
     function actualizarGraficoSemanal(labels, montos) {
         const ctx = document.getElementById('chartSemanal').getContext('2d');
         if (chartSemanal) chartSemanal.destroy();
         chartSemanal = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{ 
-                    data: montos, 
-                    borderColor: '#00E0D0', 
-                    tension: 0.4, 
-                    fill: true, 
-                    backgroundColor: 'rgba(0, 224, 208, 0.1)' 
-                }]
-            },
-            options: { 
-                plugins: { legend: { display: false } }, 
-                scales: { 
-                    y: { display: false }, 
-                    x: { ticks: { color: '#6B7280', font: { size: 9 } } } 
-                } 
-            }
+            data: { labels: labels, datasets: [{ data: montos, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.1)' }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
         });
     }
 
-    // Modales y Utilidades
     window.abrirModal = function(dataEncoded) {
         const data = JSON.parse(atob(dataEncoded));
-        document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
+        document.getElementById('modal-fecha').innerText = data.fecha;
         document.getElementById('modal-efectivo').innerText = `$${(Number(data.efectivo) || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(Number(data.tarjeta) || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-pases').innerText = data.cant_pases || data.pases || 0;
-        document.getElementById('modal-minutos').innerText = data.cant_minutos || data.minutos || 0;
         document.getElementById('modal-total').innerText = `$${(Number(data.total_recaudado) || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
 
-    window.cerrarModal = function() {
-        document.getElementById('modal-detalle').classList.add('hidden');
-    }
-
-    // Eventos Iniciales
+    window.cerrarModal = () => document.getElementById('modal-detalle').classList.add('hidden');
     document.getElementById('btn-entrar').onclick = verificarClave;
-    
-    // Soporte para tecla Enter en el PIN
-    document.getElementById('input-pass').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') verificarClave();
-    });
-
-    // Auto-login si ya estaba autenticado
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
         iniciarEscuchas();
