@@ -178,8 +178,10 @@
                 const d = docSnap.data();
                 document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
                 
-                // USAMOS EL CAMPO CALCULADO EN PYTHON
+                // --- MODIFICACIÓN AQUÍ ---
+                // Leemos directamente el campo total_autos enviado desde Python
                 document.getElementById('cant-hoy').innerText = d.total_autos || 0;
+                // --------------------------
                 
                 document.getElementById('cifra-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
                 document.getElementById('cifra-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
@@ -238,7 +240,6 @@
 
     window.abrirModal = function(dataEncoded) {
         const d = JSON.parse(atob(dataEncoded));
-        // En cierres históricos, sumamos pases + minutos pagados
         const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
         const prom = vh > 0 ? Math.round(d.total_recaudado / vh) : 0;
         
