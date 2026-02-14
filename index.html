@@ -176,8 +176,17 @@
     }
 
     function iniciarEscuchas() {
-        // Dashboard Tiempo Real
-        onSnapshot(doc(db, "admin_stats", "hoy"), (docSnap) => {
+        // 1. OBTENER LA FECHA DE HOY (Igual que en Python)
+        const ahora = new Date();
+        const dia = String(ahora.getDate()).padStart(2, '0');
+        const mes = String(ahora.getMonth() + 1).padStart(2, '0');
+        const anio = ahora.getFullYear();
+        const fechaDoc = `${dia}-${mes}-${anio}`; // Resultado: "13-02-2026"
+
+        console.log("Escuchando datos de:", fechaDoc);
+
+        // 2. Dashboard Tiempo Real (Escuchando el documento con la fecha de hoy)
+        onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
                 document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
@@ -189,11 +198,36 @@
                 document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
                 
-                // CORRECCIÓN: Forzamos la actualización del gráfico con números reales
                 actualizarGraficoPagos(Number(d.efectivo || 0), Number(d.tarjeta || 0));
+            } else {
+                console.log("Aún no hay datos para el documento:", fechaDoc);
+                // Si no hay datos hoy, podrías poner todo en 0 o mostrar un mensaje
             }
         });
 
+        // Historial (Este se mantiene igual porque busca en otra colección)
+        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
+        onSnapshot(q, (snapshot) => {
+            let labels = []; let montos = []; let html = "";
+            snapshot.forEach((doc) => {
+                const d = doc.data();
+                labels.push(d.fecha);
+                montos.push(d.total_recaudado);
+                
+                const dataEncoded = btoa(JSON.stringify(d));
+                html += `
+                    <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
+                        <div class="flex flex-col">
+                            <span class="text-white font-medium">${d.fecha}</span>
+                            <span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter">Click para detalle</span>
+                        </div>
+                        <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
+                    </div>`;
+            });
+            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
+            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
+        });
+    }
         // Historial
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
