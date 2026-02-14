@@ -157,6 +157,7 @@
     let chartPagos;
     let chartSemanal;
 
+    // Función de Login
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
         const errorMsg = document.getElementById('error-pass');
@@ -171,21 +172,22 @@
             }
         } catch (e) { 
             console.error(e);
-            alert("Error de conexión");
+            alert("Error de conexión con Firebase");
         }
     }
 
+    // Función Principal de Datos
     function iniciarEscuchas() {
-        // 1. OBTENER LA FECHA DE HOY (Igual que en Python)
+        // 1. Calcular Fecha de Hoy para buscar el documento correcto
         const ahora = new Date();
         const dia = String(ahora.getDate()).padStart(2, '0');
         const mes = String(ahora.getMonth() + 1).padStart(2, '0');
         const anio = ahora.getFullYear();
-        const fechaDoc = `${dia}-${mes}-${anio}`; // Resultado: "13-02-2026"
+        const fechaDoc = `${dia}-${mes}-${anio}`;
 
-        console.log("Escuchando datos de:", fechaDoc);
+        console.log("Iniciando escucha para el documento:", fechaDoc);
 
-        // 2. Dashboard Tiempo Real (Escuchando el documento con la fecha de hoy)
+        // 2. Escucha en Tiempo Real del Dashboard
         onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
@@ -196,16 +198,15 @@
                 document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
                 document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
                 document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
-                document.getElementById('fecha-actual').innerText = d.fecha_dato || "--/--/--";
+                document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
                 
                 actualizarGraficoPagos(Number(d.efectivo || 0), Number(d.tarjeta || 0));
             } else {
-                console.log("Aún no hay datos para el documento:", fechaDoc);
-                // Si no hay datos hoy, podrías poner todo en 0 o mostrar un mensaje
+                console.log("No hay datos para hoy todavía.");
             }
         });
 
-        // Historial (Este se mantiene igual porque busca en otra colección)
+        // 3. Escucha del Historial de Cierres
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -224,41 +225,18 @@
                         <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
                     </div>`;
             });
-            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
-            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
-        });
-    }
-        // Historial
-        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
-        onSnapshot(q, (snapshot) => {
-            let labels = []; let montos = []; let html = "";
-            snapshot.forEach((doc) => {
-                const d = doc.data();
-                labels.push(d.fecha);
-                montos.push(d.total_recaudado);
-                
-                const dataEncoded = btoa(JSON.stringify(d));
-                html += `
-                    <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
-                        <div class="flex flex-col">
-                            <span class="text-white font-medium">${d.fecha}</span>
-                            <span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter">Click para detalle</span>
-                        </div>
-                        <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
-                    </div>`;
-            });
-            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
+            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres registrados";
             actualizarGraficoSemanal(labels.reverse(), montos.reverse());
         });
     }
 
+    // Gráfico de Dona (Efectivo vs Tarjeta)
     function actualizarGraficoPagos(ef, tj) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
         
-        // CORRECCIÓN: Manejo de estado vacío para evitar que el gráfico no cargue
         const total = ef + tj;
-        const dataValues = total > 0 ? [ef, tj] : [1, 0.0001];
+        const dataValues = total > 0 ? [ef, tj] : [1, 0];
         const colores = total > 0 ? ['#00C853', '#00E0D0'] : ['#1B263B', '#1B263B'];
 
         chartPagos = new Chart(ctx, {
@@ -283,6 +261,7 @@
         });
     }
 
+    // Gráfico de Línea (Semanal)
     function actualizarGraficoSemanal(labels, montos) {
         const ctx = document.getElementById('chartSemanal').getContext('2d');
         if (chartSemanal) chartSemanal.destroy();
@@ -290,28 +269,33 @@
             type: 'line',
             data: {
                 labels: labels,
-                datasets: [{ data: montos, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.1)' }]
+                datasets: [{ 
+                    data: montos, 
+                    borderColor: '#00E0D0', 
+                    tension: 0.4, 
+                    fill: true, 
+                    backgroundColor: 'rgba(0, 224, 208, 0.1)' 
+                }]
             },
-            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
+            options: { 
+                plugins: { legend: { display: false } }, 
+                scales: { 
+                    y: { display: false }, 
+                    x: { ticks: { color: '#6B7280', font: { size: 9 } } } 
+                } 
+            }
         });
     }
 
-    // FUNCIONES GLOBALES CORREGIDAS PARA EL MODAL
+    // Modales y Utilidades
     window.abrirModal = function(dataEncoded) {
         const data = JSON.parse(atob(dataEncoded));
-        
         document.getElementById('modal-fecha').innerText = data.fecha || "--/--/--";
-        
-        // CORRECCIÓN: Leer montos asegurando que sean números y formateados
         document.getElementById('modal-efectivo').innerText = `$${(Number(data.efectivo) || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(Number(data.tarjeta) || 0).toLocaleString('es-CL')}`;
-        
-        // CORRECCIÓN: Compatibilidad con nombres de variables (cant_pases vs pases)
         document.getElementById('modal-pases').innerText = data.cant_pases || data.pases || 0;
         document.getElementById('modal-minutos').innerText = data.cant_minutos || data.minutos || 0;
-        
         document.getElementById('modal-total').innerText = `$${(Number(data.total_recaudado) || 0).toLocaleString('es-CL')}`;
-        
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
 
@@ -319,7 +303,15 @@
         document.getElementById('modal-detalle').classList.add('hidden');
     }
 
+    // Eventos Iniciales
     document.getElementById('btn-entrar').onclick = verificarClave;
+    
+    // Soporte para tecla Enter en el PIN
+    document.getElementById('input-pass').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') verificarClave();
+    });
+
+    // Auto-login si ya estaba autenticado
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
         iniciarEscuchas();
