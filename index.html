@@ -47,23 +47,6 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-2 gap-3 mb-6">
-        <div class="glass p-3 flex flex-col">
-            <span class="text-[#FF6B35] text-[9px] font-black uppercase mb-1">Tickets Minuto</span>
-            <div class="flex justify-between items-end">
-                <span id="dinero-minutos" class="text-lg font-bold text-white">$0</span>
-                <span id="num-minutos" class="text-[10px] text-gray-400">0 vh</span>
-            </div>
-        </div>
-        <div class="glass p-3 flex flex-col">
-            <span class="text-[#00C853] text-[9px] font-black uppercase mb-1">Pases Diarios</span>
-            <div class="flex justify-between items-end">
-                <span id="dinero-pases" class="text-lg font-bold text-white">$0</span>
-                <span id="num-pases" class="text-[10px] text-gray-400">0 vh</span>
-            </div>
-        </div>
-    </div>
-
     <div class="card">
         <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos</h2>
         <div class="flex items-center justify-between gap-2">
@@ -84,89 +67,70 @@
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Últimos 7 Días</h2>
+        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Semanal</h2>
         <canvas id="chartSemanal" style="max-height: 180px;"></canvas>
     </div>
 
     <div class="card">
         <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
         <div id="lista-cierres" class="text-xs space-y-3">
-            <p class="text-gray-500 italic text-center text-xs">Cargando historial...</p>
+            <p class="text-gray-500 italic text-center text-xs">Conectando con historial...</p>
         </div>
     </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
         <div class="mb-8 text-center">
             <h1 class="text-4xl font-black text-[#00E0D0] mb-2 italic">VIVE QUINTAY</h1>
-            <p class="text-gray-400 tracking-[0.3em] text-xs">ADMINISTRACIÓN</p>
+            <p class="text-gray-400 tracking-[0.3em] text-xs uppercase">Administración</p>
         </div>
         <div class="w-full max-w-xs">
             <input type="password" id="input-pass" placeholder="PIN" 
                 class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
-            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform shadow-lg shadow-[#00E0D0]/20">
+            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform shadow-lg">
                 ACCEDER
             </button>
-            <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden font-bold">PIN INCORRECTO</p>
+            <p id="error-pass" class="text-red-400 text-sm mt-4 text-center hidden font-bold italic">PIN INCORRECTO</p>
         </div>
     </div>
 
     <div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4">
-        <div class="bg-[#0D3B5C] w-full max-w-md rounded-[2rem] overflow-hidden shadow-2xl border border-white/10 modal-anim">
+        <div class="bg-[#0D3B5C] w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10 modal-anim">
             <div class="p-6 bg-[#0A2F4F] border-b border-white/10 flex justify-between items-center">
                 <div>
-                    <h3 id="modal-fecha" class="text-2xl font-black text-[#00E0D0] tracking-tight">--/--/--</h3>
-                    <p class="text-[10px] text-gray-400 uppercase tracking-[0.2em]">Resumen de Operación</p>
+                    <h3 id="modal-fecha" class="text-2xl font-black text-[#00E0D0]">--/--/--</h3>
+                    <p class="text-[9px] text-gray-400 uppercase tracking-widest">Snapshot de Cierre</p>
                 </div>
-                <button onclick="cerrarModal()" class="w-10 h-10 flex items-center justify-center rounded-full bg-white/5 text-gray-400 hover:text-white text-2xl">&times;</button>
+                <button onclick="cerrarModal()" class="text-gray-400 text-3xl">&times;</button>
             </div>
-
-            <div class="p-6 space-y-6">
+            <div class="p-6 space-y-5">
                 <div class="flex justify-between items-center bg-white/5 rounded-2xl p-4 border border-white/5">
-                    <div class="text-left">
-                        <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Total Recaudado</p>
+                    <div>
+                        <p class="text-[9px] text-gray-400 uppercase font-bold mb-1">Total Parking</p>
                         <p id="modal-total" class="text-3xl font-black text-[#00E0D0]">$0</p>
                     </div>
                     <div class="text-right">
-                        <p class="text-[10px] text-gray-400 uppercase font-bold mb-1">Flujo Total</p>
-                        <p id="modal-flujo-total" class="text-3xl font-black text-white">0 <span class="text-xs text-gray-500">vh</span></p>
+                        <p class="text-[9px] text-gray-400 uppercase font-bold mb-1">Flujo Total</p>
+                        <p id="modal-flujo-total" class="text-3xl font-black text-white">0</p>
                     </div>
                 </div>
-
-                <div>
-                    <p class="text-[10px] text-gray-400 uppercase font-black mb-3 tracking-widest text-center">Métodos de Pago</p>
-                    <div class="grid grid-cols-2 gap-3">
-                        <div class="glass p-3 border-l-4 border-[#00C853]">
-                            <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
-                            <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
-                        </div>
-                        <div class="glass p-3 border-l-4 border-[#00E0D0]">
-                            <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
-                            <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
-                        </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="glass p-3 border-l-4 border-[#00C853]">
+                        <p class="text-[9px] text-gray-400 uppercase">Efectivo</p>
+                        <p id="modal-efectivo" class="text-lg font-bold text-white">$0</p>
+                    </div>
+                    <div class="glass p-3 border-l-4 border-[#00E0D0]">
+                        <p class="text-[9px] text-gray-400 uppercase">Tarjeta</p>
+                        <p id="modal-tarjeta" class="text-lg font-bold text-white">$0</p>
                     </div>
                 </div>
-
-                <div class="space-y-3">
-                    <p class="text-[10px] text-gray-400 uppercase font-black mb-3 tracking-widest text-center">Distribución de Servicios</p>
-                    <div class="flex justify-between items-center p-3 glass">
-                        <span class="text-sm text-gray-300">Tickets por Minuto</span>
-                        <span id="modal-minutos" class="font-bold text-orange-400">0 vh</span>
+                <div class="space-y-2">
+                    <div class="flex justify-between p-3 glass text-sm">
+                        <span class="text-gray-400 italic">Ticket Promedio:</span>
+                        <span id="modal-promedio" class="font-bold text-[#00E0D0]">$0 / vh</span>
                     </div>
-                    <div class="flex justify-between items-center p-3 glass">
-                        <span class="text-sm text-gray-300">Pases Diarios</span>
-                        <span id="modal-pases" class="font-bold text-green-400">0 vh</span>
-                    </div>
-                </div>
-                
-                <div class="text-center pt-2">
-                    <p class="text-[9px] text-gray-500 uppercase">Ticket Promedio por Vehículo</p>
-                    <p id="modal-promedio" class="text-sm font-mono text-gray-300 italic">$0 / vh</p>
                 </div>
             </div>
-
-            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black text-sm uppercase tracking-widest hover:brightness-110 transition-all">
-                Cerrar Detalle
-            </button>
+            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">Cerrar</button>
         </div>
     </div>
 
@@ -203,31 +167,23 @@
     }
 
     function iniciarEscuchas() {
-        const ahora = new Date();
-        const dia = String(ahora.getDate()).padStart(2, '0');
-        const mes = String(ahora.getMonth() + 1).padStart(2, '0');
-        const anio = ahora.getFullYear();
-        const fechaDoc = `${dia}-${mes}-${anio}`;
-
-        onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
+        const hoyStr = new Date().toLocaleDateString('es-CL').replace(/\//g, '-');
+        
+        // Monitor Hoy
+        onSnapshot(doc(db, "admin_stats", hoyStr), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
                 document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
                 document.getElementById('cant-hoy').innerText = (d.cant_pases || 0) + (d.cant_minutos || 0);
-                document.getElementById('num-minutos').innerText = `${d.cant_minutos || 0} vh`;
-                document.getElementById('num-pases').innerText = `${d.cant_pases || 0} vh`;
-                document.getElementById('dinero-minutos').innerText = `$${(d.dinero_minutos || 0).toLocaleString('es-CL')}`;
-                document.getElementById('dinero-pases').innerText = `$${(d.dinero_pases || 0).toLocaleString('es-CL')}`;
-                document.getElementById('hora-sincro').innerText = `Sincro: ${d.ultima_actualizacion || '--:--'}`;
-                document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
-
                 document.getElementById('cifra-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
                 document.getElementById('cifra-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
-                
-                actualizarGraficoPagos(Number(d.efectivo || 0), Number(d.tarjeta || 0));
+                document.getElementById('fecha-actual').innerText = d.fecha_dato || hoyStr;
+                document.getElementById('hora-sincro').innerText = `Sync: ${new Date().toLocaleTimeString()}`;
+                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
             }
         });
 
+        // Monitor Historial (Real-time)
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
         onSnapshot(q, (snapshot) => {
             let labels = []; let montos = []; let html = "";
@@ -236,12 +192,12 @@
                 labels.push(d.fecha);
                 montos.push(d.total_recaudado);
                 const dataEncoded = btoa(JSON.stringify(d));
-                html += `<div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-transform cursor-pointer">
-                    <div class="flex flex-col"><span class="text-white font-medium">${d.fecha}</span><span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter">Click para Snapshot</span></div>
+                html += `<div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-all">
+                    <div class="flex flex-col"><span class="font-bold">${d.fecha}</span><span class="text-[8px] text-[#00E0D0] uppercase">Ver Snapshot</span></div>
                     <span class="font-bold text-[#00C853]">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
                 </div>`;
             });
-            document.getElementById('lista-cierres').innerHTML = html || "Sin cierres";
+            document.getElementById('lista-cierres').innerHTML = html || "Esperando cierres...";
             actualizarGraficoSemanal(labels.reverse(), montos.reverse());
         });
     }
@@ -249,11 +205,9 @@
     function actualizarGraficoPagos(ef, tj) {
         const ctx = document.getElementById('chartPagos').getContext('2d');
         if (chartPagos) chartPagos.destroy();
-        const total = ef + tj;
-        const dataValues = total > 0 ? [ef, tj] : [1, 0];
         chartPagos = new Chart(ctx, {
             type: 'doughnut',
-            data: { datasets: [{ data: dataValues, backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }] },
+            data: { datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }] },
             options: { cutout: '75%', plugins: { legend: { display: false } }, maintainAspectRatio: false }
         });
     }
@@ -269,34 +223,23 @@
     }
 
     window.abrirModal = function(dataEncoded) {
-        const data = JSON.parse(atob(dataEncoded));
-        const fmt = (val) => `$${(Number(val) || 0).toLocaleString('es-CL')}`;
+        const d = JSON.parse(atob(dataEncoded));
+        const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
+        const prom = vh > 0 ? Math.round(d.total_recaudado / vh) : 0;
         
-        const total = Number(data.total_recaudado) || 0;
-        const vhMinutos = Number(data.cant_minutos || data.minutos) || 0;
-        const vhPases = Number(data.cant_pases || data.pases) || 0;
-        const flujoTotal = vhMinutos + vhPases;
-        const ticketPromedio = flujoTotal > 0 ? Math.round(total / flujoTotal) : 0;
-
-        document.getElementById('modal-fecha').innerText = data.fecha;
-        document.getElementById('modal-total').innerText = fmt(total);
-        document.getElementById('modal-flujo-total').innerText = flujoTotal;
-        document.getElementById('modal-efectivo').innerText = fmt(data.efectivo);
-        document.getElementById('modal-tarjeta').innerText = fmt(data.tarjeta);
-        document.getElementById('modal-minutos').innerText = `${vhMinutos} vh`;
-        document.getElementById('modal-pases').innerText = `${vhPases} vh`;
-        document.getElementById('modal-promedio').innerText = `${fmt(ticketPromedio)} por vehículo`;
-        
+        document.getElementById('modal-fecha').innerText = d.fecha;
+        document.getElementById('modal-total').innerText = `$${(d.total_recaudado || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-flujo-total').innerText = vh;
+        document.getElementById('modal-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
+        document.getElementById('modal-promedio').innerText = `$${prom.toLocaleString('es-CL')} / vh`;
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
 
     window.cerrarModal = () => document.getElementById('modal-detalle').classList.add('hidden');
     document.getElementById('btn-entrar').onclick = verificarClave;
+    document.getElementById('input-pass').addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarClave(); });
     
-    document.getElementById('input-pass').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') verificarClave();
-    });
-
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
         iniciarEscuchas();
