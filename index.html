@@ -44,6 +44,10 @@
         <div class="card flex flex-col items-center border-t-4 border-[#FFD700]">
             <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Autos</span>
             <span id="cant-hoy" class="text-2xl font-black text-white">0</span>
+            <div class="flex gap-2 mt-1">
+                <span class="text-[9px] text-gray-400">P: <b id="sub-pases" class="text-white">0</b></span>
+                <span class="text-[9px] text-gray-400">M: <b id="sub-minutos" class="text-white">0</b></span>
+            </div>
         </div>
     </div>
 
@@ -102,7 +106,7 @@
                 </div>
                 <button onclick="cerrarModal()" class="text-gray-400 text-3xl font-light hover:text-white transition-colors">&times;</button>
             </div>
-            <div class="p-6 space-y-6">
+            <div class="p-6 space-y-4">
                 <div class="flex justify-between items-center bg-white/5 rounded-2xl p-5 border border-white/10">
                     <div>
                         <p class="text-[9px] text-gray-400 uppercase font-black mb-1">Recaudación</p>
@@ -111,6 +115,16 @@
                     <div class="text-right">
                         <p class="text-[9px] text-gray-400 uppercase font-black mb-1">Total Autos</p>
                         <p id="modal-flujo-total" class="text-3xl font-black text-white">0</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="glass p-3 text-center">
+                        <p class="text-[8px] text-gray-400 uppercase">Pases Diarios</p>
+                        <p id="modal-pases" class="text-lg font-bold text-white">0</p>
+                    </div>
+                    <div class="glass p-3 text-center">
+                        <p class="text-[8px] text-gray-400 uppercase">Tickets Minuto</p>
+                        <p id="modal-minutos" class="text-lg font-bold text-white">0</p>
                     </div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
@@ -128,7 +142,7 @@
                     <span id="modal-promedio" class="font-mono text-[#00E0D0] font-bold">$0 / auto</span>
                 </div>
             </div>
-            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest hover:bg-[#00c4b6] transition-colors">
+            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">
                 Cerrar Reporte
             </button>
         </div>
@@ -178,10 +192,10 @@
                 const d = docSnap.data();
                 document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
                 
-                // --- MODIFICACIÓN AQUÍ ---
-                // Leemos directamente el campo total_autos enviado desde Python
+                // MOSTRAR TOTAL Y DESGLOSE
                 document.getElementById('cant-hoy').innerText = d.total_autos || 0;
-                // --------------------------
+                document.getElementById('sub-pases').innerText = d.cant_pases || 0;
+                document.getElementById('sub-minutos').innerText = d.cant_minutos || 0;
                 
                 document.getElementById('cifra-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
                 document.getElementById('cifra-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
@@ -246,6 +260,8 @@
         document.getElementById('modal-fecha').innerText = d.fecha;
         document.getElementById('modal-total').innerText = `$${(d.total_recaudado || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-flujo-total').innerText = vh;
+        document.getElementById('modal-pases').innerText = d.cant_pases || 0;
+        document.getElementById('modal-minutos').innerText = d.cant_minutos || 0;
         document.getElementById('modal-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-promedio').innerText = `$${prom.toLocaleString('es-CL')} / auto`;
