@@ -6,20 +6,25 @@
     <title>Vive Quintay ADMIN - Premium</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0A2F4F">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="logo.png">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #0A2F4F; color: white; }
+        body { background-color: #0A2F4F; color: white; overflow-x: hidden; }
         .card { background-color: #0D3B5C; border-radius: 18px; padding: 20px; margin-bottom: 16px; border: 1px solid #1B263B; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
-        @keyframes fadeInScale {
-            from { opacity: 0; transform: scale(0.95); }
-            to { opacity: 1; transform: scale(1); }
-        }
+        
+        /* Estilos para el Deslizador (Carousel) */
+        .carousel-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        .carousel-container::-webkit-scrollbar { display: none; }
+        .carousel-item { min-width: 100%; scroll-snap-align: start; flex-shrink: 0; }
+
+        /* Estilos para el Historial con Scroll */
+        .history-scroll { max-height: 400px; overflow-y: auto; padding-right: 4px; position: relative; }
+        .history-scroll::-webkit-scrollbar { width: 4px; }
+        .history-scroll::-webkit-scrollbar-thumb { background: #1B263B; border-radius: 10px; }
+        .fade-bottom { position: sticky; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(transparent, #0D3B5C); pointer-events: none; }
+
+        @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .modal-anim { animation: fadeInScale 0.2s ease-out forwards; }
     </style>
 </head>
@@ -27,7 +32,7 @@
 
     <header class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight text-shadow-sm">VIVE QUINTAY</h1>
+            <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight">VIVE QUINTAY</h1>
             <p class="text-gray-400 text-[10px] uppercase tracking-widest">Business Intelligence</p>
         </div>
         <div class="text-right">
@@ -36,74 +41,80 @@
         </div>
     </header>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div class="card flex flex-col items-center border-t-4 border-[#00C853]">
-            <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Ingresos Hoy</span>
-            <span id="total-hoy" class="text-3xl font-black text-white">$0</span>
+    <div class="card border-t-4 border-[#00C853] p-0 overflow-hidden">
+        <div class="carousel-container" id="carousel-ingresos">
+            <div class="carousel-item p-5 flex flex-col items-center">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Ingresos Hoy</span>
+                <span id="total-hoy" class="text-4xl font-black text-white">$0</span>
+                <div class="mt-2 flex gap-1"><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
+            </div>
+            <div class="carousel-item p-5 flex flex-col items-center">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Acumulado Mes</span>
+                <span id="total-mes" class="text-4xl font-black text-[#00E0D0]">$0</span>
+                <div class="mt-2 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
+            </div>
+            <div class="carousel-item p-5 flex flex-col items-center">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Anual</span>
+                <span id="total-anio" class="text-4xl font-black text-[#FFD700]">$0</span>
+                <div class="mt-2 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div></div>
+            </div>
         </div>
+    </div>
 
-        <div class="card border-t-4 border-[#FFD700]">
-            <span class="text-gray-400 text-[10px] uppercase font-bold mb-3 block text-center">Autos Pagados</span>
-            <div class="flex items-center justify-between">
-                <div class="space-y-2 w-1/2">
-                    <div class="flex flex-col border-l-2 border-[#00C853] pl-2">
-                        <span class="text-[8px] text-gray-400 uppercase font-black">Pase Diario</span>
-                        <span id="sub-pases" class="text-lg font-bold text-white leading-tight">0</span>
-                    </div>
-                    <div class="flex flex-col border-l-2 border-[#00E0D0] pl-2">
-                        <span class="text-[8px] text-gray-400 uppercase font-black">Ticket Minuto</span>
-                        <span id="sub-minutos" class="text-lg font-bold text-white leading-tight">0</span>
-                    </div>
+    <div class="card border-t-4 border-[#FFD700]">
+        <span class="text-gray-400 text-[10px] uppercase font-bold mb-3 block text-center">Autos Hoy</span>
+        <div class="flex items-center justify-around">
+            <div class="text-center">
+                <span id="cant-hoy" class="text-5xl font-black text-white">0</span>
+            </div>
+            <div class="space-y-1">
+                <div class="flex flex-col border-l-2 border-[#00C853] pl-2">
+                    <span class="text-[8px] text-gray-400 uppercase font-black">Diarios</span>
+                    <span id="sub-pases" class="text-sm font-bold text-white">0</span>
                 </div>
-                <div class="w-1/2 text-right border-l border-white/10">
-                    <span id="cant-hoy" class="text-5xl font-black text-white mr-2">0</span>
+                <div class="flex flex-col border-l-2 border-[#00E0D0] pl-2">
+                    <span class="text-[8px] text-gray-400 uppercase font-black">Tickets</span>
+                    <span id="sub-minutos" class="text-sm font-bold text-white">0</span>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos</h2>
-        <div class="flex items-center justify-between gap-2">
-            <div class="w-[45%]">
-                <canvas id="chartPagos" style="max-height: 140px;"></canvas>
-            </div>
-            <div class="w-[55%] space-y-4 pl-2">
+        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos (Hoy)</h2>
+        <div class="flex items-center justify-between">
+            <div class="w-[45%]"><canvas id="chartPagos" style="max-height: 120px;"></canvas></div>
+            <div class="w-[50%] space-y-4">
                 <div class="flex flex-col border-l-4 border-[#00C853] pl-3">
                     <span class="text-[9px] text-gray-400 uppercase font-black">Efectivo</span>
-                    <span id="cifra-efectivo" class="text-xl font-black text-white leading-tight">$0</span>
+                    <span id="cifra-efectivo" class="text-xl font-black text-white">$0</span>
                 </div>
                 <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3">
                     <span class="text-[9px] text-gray-400 uppercase font-black">Tarjeta</span>
-                    <span id="cifra-tarjeta" class="text-xl font-black text-white leading-tight">$0</span>
+                    <span id="cifra-tarjeta" class="text-xl font-black text-white">$0</span>
                 </div>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Semanal</h2>
+        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Histórico</h2>
         <canvas id="chartSemanal" style="max-height: 180px;"></canvas>
     </div>
 
     <div class="card">
         <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
-        <div id="lista-cierres" class="text-xs space-y-3">
-            <p class="text-gray-500 italic text-center text-xs">Cargando datos históricos...</p>
+        <div class="history-scroll" id="lista-cierres">
+            <p class="text-gray-500 italic text-center text-xs">Cargando datos...</p>
         </div>
+        <div class="fade-bottom"></div>
     </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
-        <div class="mb-8 text-center">
-            <h1 class="text-4xl font-black text-[#00E0D0] mb-2 italic">VIVE QUINTAY</h1>
-            <p class="text-gray-400 tracking-[0.3em] text-[10px] uppercase font-bold">Panel de Administración</p>
-        </div>
+        <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic">VIVE QUINTAY</h1>
         <div class="w-full max-w-xs">
-            <input type="password" id="input-pass" placeholder="PIN" 
-                class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
-            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform">
-                INGRESAR
-            </button>
+            <input type="password" id="input-pass" placeholder="PIN" class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
+            <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform">INGRESAR</button>
             <p id="error-pass" class="text-red-400 text-xs mt-4 text-center hidden font-bold">ACCESO DENEGADO</p>
         </div>
     </div>
@@ -111,51 +122,20 @@
     <div id="modal-detalle" class="fixed inset-0 z-[150] bg-black/90 backdrop-blur-md hidden flex items-center justify-center p-4">
         <div class="bg-[#0D3B5C] w-full max-w-md rounded-[2.5rem] overflow-hidden shadow-2xl border border-white/10 modal-anim">
             <div class="p-6 bg-[#0A2F4F] border-b border-white/10 flex justify-between items-center">
-                <div>
-                    <h3 id="modal-fecha" class="text-2xl font-black text-[#00E0D0]">--/--/--</h3>
-                    <p class="text-[9px] text-gray-400 uppercase tracking-widest">Resumen de Operación</p>
-                </div>
-                <button onclick="cerrarModal()" class="text-gray-400 text-3xl font-light hover:text-white transition-colors">&times;</button>
+                <div><h3 id="modal-fecha" class="text-2xl font-black text-[#00E0D0]">--/--/--</h3><p class="text-[9px] text-gray-400 uppercase tracking-widest">Resumen de Operación</p></div>
+                <button onclick="cerrarModal()" class="text-gray-400 text-3xl font-light">&times;</button>
             </div>
             <div class="p-6 space-y-4">
                 <div class="flex justify-between items-center bg-white/5 rounded-2xl p-5 border border-white/10">
-                    <div>
-                        <p class="text-[9px] text-gray-400 uppercase font-black mb-1">Recaudación</p>
-                        <p id="modal-total" class="text-3xl font-black text-[#00E0D0]">$0</p>
-                    </div>
-                    <div class="text-right">
-                        <p class="text-[9px] text-gray-400 uppercase font-black mb-1">Autos Totales</p>
-                        <p id="modal-flujo-total" class="text-3xl font-black text-white">0</p>
-                    </div>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div class="glass p-3 text-center border-l-2 border-[#00C853]">
-                        <p class="text-[8px] text-gray-400 uppercase">Pases Diarios</p>
-                        <p id="modal-pases" class="text-lg font-bold text-white">0</p>
-                    </div>
-                    <div class="glass p-3 text-center border-l-2 border-[#00E0D0]">
-                        <p class="text-[8px] text-gray-400 uppercase">Tickets Minuto</p>
-                        <p id="modal-minutos" class="text-lg font-bold text-white">0</p>
-                    </div>
+                    <div><p class="text-[9px] text-gray-400 uppercase font-black mb-1">Recaudación</p><p id="modal-total" class="text-3xl font-black text-[#00E0D0]">$0</p></div>
+                    <div class="text-right"><p class="text-[9px] text-gray-400 uppercase font-black mb-1">Autos Totales</p><p id="modal-flujo-total" class="text-3xl font-black text-white">0</p></div>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
-                    <div class="glass p-4 border-l-4 border-[#00C853]">
-                        <p class="text-[9px] text-gray-400 uppercase font-bold">Efectivo</p>
-                        <p id="modal-efectivo" class="text-xl font-bold text-white">$0</p>
-                    </div>
-                    <div class="glass p-4 border-l-4 border-[#00E0D0]">
-                        <p class="text-[9px] text-gray-400 uppercase font-bold">Tarjeta</p>
-                        <p id="modal-tarjeta" class="text-xl font-bold text-white">$0</p>
-                    </div>
-                </div>
-                <div class="bg-white/5 rounded-xl p-3 text-center border border-dashed border-white/10">
-                    <span class="text-[10px] text-gray-500 uppercase font-bold mr-2">Ticket Promedio:</span>
-                    <span id="modal-promedio" class="font-mono text-[#00E0D0] font-bold">$0 / auto</span>
+                    <div class="glass p-4 border-l-4 border-[#00C853]"><p class="text-[9px] text-gray-400 uppercase font-bold">Efectivo</p><p id="modal-efectivo" class="text-xl font-bold text-white">$0</p></div>
+                    <div class="glass p-4 border-l-4 border-[#00E0D0]"><p class="text-[9px] text-gray-400 uppercase font-bold">Tarjeta</p><p id="modal-tarjeta" class="text-xl font-bold text-white">$0</p></div>
                 </div>
             </div>
-            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">
-                Cerrar Reporte
-            </button>
+            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">Cerrar Reporte</button>
         </div>
     </div>
 
@@ -166,18 +146,17 @@
         projectId: "vive-quintay-spa",
         storageBucket: "vive-quintay-spa.firebasestorage.app",
         messagingSenderId: "1016972577353",
-        appId: "1:1016972577353:web:81a7a1af882c8296640d98",
-        measurementId: "G-E0GZE2NWDD"
+        appId: "1:1016972577353:web:81a7a1af882c8296640d98"
     };
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let chartPagos;
-    let chartSemanal;
+    let chartPagos, chartSemanal;
+    let totalHoyGlobal = 0;
 
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
@@ -193,15 +172,14 @@
 
     function iniciarEscuchas() {
         const hoy = new Date();
-        const dia = String(hoy.getDate()).padStart(2, '0');
-        const mes = String(hoy.getMonth() + 1).padStart(2, '0');
-        const anio = hoy.getFullYear();
-        const fechaDoc = `${dia}-${mes}-${anio}`;
+        const fechaDoc = `${String(hoy.getDate()).padStart(2, '0')}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${hoy.getFullYear()}`;
 
+        // Escucha de HOY
         onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
-                document.getElementById('total-hoy').innerText = `$${(d.total_hoy || 0).toLocaleString('es-CL')}`;
+                totalHoyGlobal = d.total_hoy || 0;
+                document.getElementById('total-hoy').innerText = `$${totalHoyGlobal.toLocaleString('es-CL')}`;
                 document.getElementById('cant-hoy').innerText = d.total_autos || 0;
                 document.getElementById('sub-pases').innerText = d.cant_pases || 0;
                 document.getElementById('sub-minutos').innerText = d.cant_minutos || 0;
@@ -213,20 +191,39 @@
             }
         });
 
-        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"), limit(14));
+        // Escucha de HISTÓRICO (Sin Límite)
+        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"));
         onSnapshot(q, (snapshot) => {
-            let labels = []; let montos = []; let html = "";
+            let html = ""; let labels = []; let montos = [];
+            let acumMes = 0; let acumAnio = 0;
+            const mesActual = hoy.getMonth();
+            const anioActual = hoy.getFullYear();
+
             snapshot.forEach((doc) => {
                 const d = doc.data();
-                labels.push(d.fecha);
-                montos.push(d.total_recaudado);
+                const fechaCierre = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
+                
+                // Cálculo Acumulados
+                if (fechaCierre.getFullYear() === anioActual) {
+                    acumAnio += d.total_recaudado || 0;
+                    if (fechaCierre.getMonth() === mesActual) {
+                        acumMes += d.total_recaudado || 0;
+                    }
+                }
+
+                // Datos para Gráfico (últimos 14 para no saturar)
+                if (labels.length < 14) {
+                    labels.push(d.fecha);
+                    montos.push(d.total_recaudado);
+                }
+
                 const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
                 const dataEncoded = btoa(JSON.stringify(d));
                 html += `
                 <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-all cursor-pointer">
                     <div class="flex flex-col">
                         <span class="font-bold text-white text-sm">${d.fecha}</span>
-                        <span class="text-[8px] text-[#00E0D0] uppercase tracking-tighter font-bold">Ver Reporte</span>
+                        <span class="text-[8px] text-[#00E0D0] uppercase font-bold">Ver Detalle</span>
                     </div>
                     <div class="text-right">
                         <span class="font-black text-[#00C853] block text-sm">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
@@ -234,7 +231,12 @@
                     </div>
                 </div>`;
             });
-            document.getElementById('lista-cierres').innerHTML = html || "Esperando registros...";
+
+            // Actualizar Cifras Carousel (Hoy + Histórico)
+            document.getElementById('total-mes').innerText = `$${(acumMes + totalHoyGlobal).toLocaleString('es-CL')}`;
+            document.getElementById('total-anio').innerText = `$${(acumAnio + totalHoyGlobal).toLocaleString('es-CL')}`;
+            
+            document.getElementById('lista-cierres').innerHTML = html || "Sin registros históricos.";
             actualizarGraficoSemanal(labels.reverse(), montos.reverse());
         });
     }
@@ -244,7 +246,7 @@
         if (chartPagos) chartPagos.destroy();
         chartPagos = new Chart(ctx, {
             type: 'doughnut',
-            data: { datasets: [{ data: [ef, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }] },
+            data: { datasets: [{ data: [ef || 1, tj], backgroundColor: ['#00C853', '#00E0D0'], borderWidth: 0 }] },
             options: { cutout: '75%', plugins: { legend: { display: false } }, maintainAspectRatio: false }
         });
     }
@@ -262,21 +264,16 @@
     window.abrirModal = function(dataEncoded) {
         const d = JSON.parse(atob(dataEncoded));
         const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
-        const prom = vh > 0 ? Math.round(d.total_recaudado / vh) : 0;
         document.getElementById('modal-fecha').innerText = d.fecha;
         document.getElementById('modal-total').innerText = `$${(d.total_recaudado || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-flujo-total').innerText = vh;
-        document.getElementById('modal-pases').innerText = d.cant_pases || 0;
-        document.getElementById('modal-minutos').innerText = d.cant_minutos || 0;
         document.getElementById('modal-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-promedio').innerText = `$${prom.toLocaleString('es-CL')} / auto`;
         document.getElementById('modal-detalle').classList.remove('hidden');
     }
 
     window.cerrarModal = () => document.getElementById('modal-detalle').classList.add('hidden');
     document.getElementById('btn-entrar').onclick = verificarClave;
-    document.getElementById('input-pass').addEventListener('keypress', (e) => { if (e.key === 'Enter') verificarClave(); });
     
     if (sessionStorage.getItem('autenticado_admin') === 'true') {
         document.getElementById('pantalla-bloqueo').style.display = 'none';
