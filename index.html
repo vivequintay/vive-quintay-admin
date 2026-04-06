@@ -2,86 +2,122 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Vive Quintay ADMIN - Premium</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0A2F4F">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { background-color: #0A2F4F; color: white; overflow-x: hidden; }
+        body { background-color: #0A2F4F; color: white; overflow-x: hidden; font-family: sans-serif; }
         .card { background-color: #0D3B5C; border-radius: 18px; padding: 20px; margin-bottom: 16px; border: 1px solid #1B263B; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
         
-        /* Estilos para el Deslizador (Carousel) */
-        .carousel-container { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+        /* Sistema de Carousel Mejorado */
+        .carousel-container { 
+            display: flex; 
+            overflow-x: auto; 
+            scroll-snap-type: x mandatory; 
+            scroll-behavior: smooth; 
+            -webkit-overflow-scrolling: touch; 
+        }
         .carousel-container::-webkit-scrollbar { display: none; }
-        .carousel-item { min-width: 100%; scroll-snap-align: start; flex-shrink: 0; }
+        /* scroll-snap-stop: always evita que se pase de largo al deslizar rápido */
+        .carousel-item { min-width: 100%; scroll-snap-align: start; scroll-snap-stop: always; flex-shrink: 0; }
 
-        /* Estilos para el Historial con Scroll */
-        .history-scroll { max-height: 400px; overflow-y: auto; padding-right: 4px; position: relative; }
+        .history-scroll { max-height: 350px; overflow-y: auto; padding-right: 4px; position: relative; }
         .history-scroll::-webkit-scrollbar { width: 4px; }
         .history-scroll::-webkit-scrollbar-thumb { background: #1B263B; border-radius: 10px; }
-        .fade-bottom { position: sticky; bottom: 0; left: 0; right: 0; height: 40px; background: linear-gradient(transparent, #0D3B5C); pointer-events: none; }
+        .fade-bottom { position: sticky; bottom: 0; left: 0; right: 0; height: 30px; background: linear-gradient(transparent, #0D3B5C); pointer-events: none; }
 
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .modal-anim { animation: fadeInScale 0.2s ease-out forwards; }
     </style>
 </head>
-<body class="p-4 font-sans mb-10">
+<body class="p-4 mb-10">
 
     <header class="flex justify-between items-center mb-6">
         <div>
-            <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight">VIVE QUINTAY</h1>
-            <p class="text-gray-400 text-[10px] uppercase tracking-widest">Business Intelligence</p>
+            <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight uppercase">VIVE QUINTAY</h1>
+            <p class="text-gray-400 text-[10px] uppercase tracking-widest font-bold">Business Intelligence</p>
         </div>
         <div class="text-right">
             <span id="fecha-actual" class="text-xs font-semibold block text-white">--/--/--</span>
-            <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando...</span>
+            <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block text-right">Sincronizando...</span>
         </div>
     </header>
 
     <div class="card border-t-4 border-[#00C853] p-0 overflow-hidden">
-        <div class="carousel-container" id="carousel-ingresos">
+        <div class="carousel-container">
             <div class="carousel-item p-5 flex flex-col items-center">
                 <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Ingresos Hoy</span>
                 <span id="total-hoy" class="text-4xl font-black text-white">$0</span>
-                <div class="mt-2 flex gap-1"><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
+                <div class="mt-3 flex gap-1"><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
             </div>
             <div class="carousel-item p-5 flex flex-col items-center">
-                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Acumulado Mes</span>
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1 tracking-widest">Acumulado Mes</span>
                 <span id="total-mes" class="text-4xl font-black text-[#00E0D0]">$0</span>
-                <div class="mt-2 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
+                <div class="mt-3 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
             </div>
             <div class="carousel-item p-5 flex flex-col items-center">
-                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Anual</span>
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1 tracking-widest">Recaudación Anual</span>
                 <span id="total-anio" class="text-4xl font-black text-[#FFD700]">$0</span>
-                <div class="mt-2 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div></div>
+                <div class="mt-3 flex gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#00E0D0] rounded-full"></div></div>
             </div>
         </div>
     </div>
 
-    <div class="card border-t-4 border-[#FFD700]">
-        <span class="text-gray-400 text-[10px] uppercase font-bold mb-3 block text-center">Autos Hoy</span>
-        <div class="flex items-center justify-around">
-            <div class="text-center">
-                <span id="cant-hoy" class="text-5xl font-black text-white">0</span>
+    <div class="card border-t-4 border-[#FFD700] p-0 overflow-hidden">
+        <div class="carousel-container">
+            <div class="carousel-item p-5">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-3 block text-center">Autos Hoy (Detalle)</span>
+                <div class="flex items-center justify-around">
+                    <span id="cant-hoy" class="text-5xl font-black text-white">0</span>
+                    <div class="space-y-1">
+                        <div class="flex flex-col border-l-2 border-[#00C853] pl-2">
+                            <span class="text-[8px] text-gray-400 uppercase font-black">Pases</span>
+                            <span id="sub-pases" class="text-sm font-bold text-white">0</span>
+                        </div>
+                        <div class="flex flex-col border-l-2 border-[#00E0D0] pl-2">
+                            <span class="text-[8px] text-gray-400 uppercase font-black">Tickets</span>
+                            <span id="sub-minutos" class="text-sm font-bold text-white">0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-4 flex justify-center gap-1"><div class="w-2 h-1 bg-[#FFD700] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
             </div>
-            <div class="space-y-1">
-                <div class="flex flex-col border-l-2 border-[#00C853] pl-2">
-                    <span class="text-[8px] text-gray-400 uppercase font-black">Diarios</span>
-                    <span id="sub-pases" class="text-sm font-bold text-white">0</span>
-                </div>
-                <div class="flex flex-col border-l-2 border-[#00E0D0] pl-2">
-                    <span class="text-[8px] text-gray-400 uppercase font-black">Tickets</span>
-                    <span id="sub-minutos" class="text-sm font-bold text-white">0</span>
-                </div>
+            <div class="carousel-item p-5 flex flex-col items-center justify-center">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Autos Mes</span>
+                <span id="cant-mes" class="text-5xl font-black text-[#00E0D0]">0</span>
+                <div class="mt-4 flex justify-center gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#FFD700] rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div></div>
+            </div>
+            <div class="carousel-item p-5 flex flex-col items-center justify-center">
+                <span class="text-gray-400 text-[10px] uppercase font-bold mb-1">Total Autos Año</span>
+                <span id="cant-anio" class="text-5xl font-black text-[#FFD700]">0</span>
+                <div class="mt-4 flex justify-center gap-1"><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-1 h-1 bg-white/20 rounded-full"></div><div class="w-2 h-1 bg-[#FFD700] rounded-full"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card p-0 overflow-hidden">
+        <div class="carousel-container">
+            <div class="carousel-item p-5">
+                <h2 class="text-center mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento HOY (Hora Punta)</h2>
+                <canvas id="chartHoy" style="max-height: 180px;"></canvas>
+            </div>
+            <div class="carousel-item p-5">
+                <h2 class="text-center mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento MENSUAL (Días)</h2>
+                <canvas id="chartMensual" style="max-height: 180px;"></canvas>
+            </div>
+            <div class="carousel-item p-5">
+                <h2 class="text-center mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento ANUAL (Meses)</h2>
+                <canvas id="chartAnual" style="max-height: 180px;"></canvas>
             </div>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos (Hoy)</h2>
+        <h2 class="text-center mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Distribución de Pagos (Hoy)</h2>
         <div class="flex items-center justify-between">
             <div class="w-[45%]"><canvas id="chartPagos" style="max-height: 120px;"></canvas></div>
             <div class="w-[50%] space-y-4">
@@ -98,24 +134,19 @@
     </div>
 
     <div class="card">
-        <h2 class="text-center mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento Histórico</h2>
-        <canvas id="chartSemanal" style="max-height: 180px;"></canvas>
-    </div>
-
-    <div class="card">
-        <h2 class="mb-4 text-[11px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
+        <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
         <div class="history-scroll" id="lista-cierres">
-            <p class="text-gray-500 italic text-center text-xs">Cargando datos...</p>
+            <p class="text-gray-500 italic text-center text-xs">Cargando base de datos...</p>
         </div>
         <div class="fade-bottom"></div>
     </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
-        <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic">VIVE QUINTAY</h1>
+        <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic tracking-tighter">VIVE QUINTAY</h1>
         <div class="w-full max-w-xs">
             <input type="password" id="input-pass" placeholder="PIN" class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
             <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-transform">INGRESAR</button>
-            <p id="error-pass" class="text-red-400 text-xs mt-4 text-center hidden font-bold">ACCESO DENEGADO</p>
+            <p id="error-pass" class="text-red-400 text-xs mt-4 text-center hidden font-bold">PIN INCORRECTO</p>
         </div>
     </div>
 
@@ -135,11 +166,14 @@
                     <div class="glass p-4 border-l-4 border-[#00E0D0]"><p class="text-[9px] text-gray-400 uppercase font-bold">Tarjeta</p><p id="modal-tarjeta" class="text-xl font-bold text-white">$0</p></div>
                 </div>
             </div>
-            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">Cerrar Reporte</button>
+            <button onclick="cerrarModal()" class="w-full p-5 bg-[#00E0D0] text-[#0A2F4F] font-black uppercase tracking-widest">Cerrar</button>
         </div>
     </div>
 
 <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
     const firebaseConfig = {
         apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k",
         authDomain: "vive-quintay-spa.firebaseapp.com",
@@ -149,14 +183,11 @@
         appId: "1:1016972577353:web:81a7a1af882c8296640d98"
     };
 
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
-
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    let chartPagos, chartSemanal;
-    let totalHoyGlobal = 0;
+    let chartPagos, chartHoy, chartMensual, chartAnual;
+    let dataHoyActual = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
 
     async function verificarClave() {
         const pass = document.getElementById('input-pass').value;
@@ -174,70 +205,143 @@
         const hoy = new Date();
         const fechaDoc = `${String(hoy.getDate()).padStart(2, '0')}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${hoy.getFullYear()}`;
 
-        // Escucha de HOY
+        // 1. Escucha de HOY (Tiempo Real)
         onSnapshot(doc(db, "admin_stats", fechaDoc), (docSnap) => {
             if (docSnap.exists()) {
                 const d = docSnap.data();
-                totalHoyGlobal = d.total_hoy || 0;
-                document.getElementById('total-hoy').innerText = `$${totalHoyGlobal.toLocaleString('es-CL')}`;
-                document.getElementById('cant-hoy').innerText = d.total_autos || 0;
-                document.getElementById('sub-pases').innerText = d.cant_pases || 0;
-                document.getElementById('sub-minutos').innerText = d.cant_minutos || 0;
-                document.getElementById('cifra-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
-                document.getElementById('cifra-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
+                dataHoyActual = { 
+                    total: d.total_hoy || 0, 
+                    autos: d.total_autos || 0, 
+                    ef: d.efectivo || 0, 
+                    tj: d.tarjeta || 0,
+                    pases: d.cant_pases || 0,
+                    minutos: d.cant_minutos || 0
+                };
+                
+                document.getElementById('total-hoy').innerText = `$${dataHoyActual.total.toLocaleString('es-CL')}`;
+                document.getElementById('cant-hoy').innerText = dataHoyActual.autos;
+                document.getElementById('sub-pases').innerText = dataHoyActual.pases;
+                document.getElementById('sub-minutos').innerText = dataHoyActual.minutos;
+                document.getElementById('cifra-efectivo').innerText = `$${dataHoyActual.ef.toLocaleString('es-CL')}`;
+                document.getElementById('cifra-tarjeta').innerText = `$${dataHoyActual.tj.toLocaleString('es-CL')}`;
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
                 document.getElementById('hora-sincro').innerText = `Sync: ${new Date().toLocaleTimeString('es-CL', {hour: '2-digit', minute:'2-digit'})}`;
-                actualizarGraficoPagos(d.efectivo || 0, d.tarjeta || 0);
+                
+                actualizarGraficoPagos(dataHoyActual.ef, dataHoyActual.tj);
+                // Aquí podrías mapear d.flujo_por_hora si lo guardas en Firebase para el Gráfico A
+                actualizarGraficoHoy([0,0,0,0,0,0,0,0,d.total_hoy,0,0,0,0,0,0]); // Ejemplo
             }
         });
 
-        // Escucha de HISTÓRICO (Sin Límite)
+        // 2. Escucha de HISTÓRICO (Business Intelligence)
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"));
         onSnapshot(q, (snapshot) => {
-            let html = ""; let labels = []; let montos = [];
-            let acumMes = 0; let acumAnio = 0;
-            const mesActual = hoy.getMonth();
-            const anioActual = hoy.getFullYear();
+            let html = "";
+            let acumMes = 0, acumAnio = 0;
+            let autosMes = 0, autosAnio = 0;
+            
+            // Estructuras para Gráficos
+            let historialDias = {}; // Para gráfico mensual
+            let historialMeses = new Array(12).fill(0); // Para gráfico anual
 
             snapshot.forEach((doc) => {
                 const d = doc.data();
-                const fechaCierre = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
-                
-                // Cálculo Acumulados
-                if (fechaCierre.getFullYear() === anioActual) {
-                    acumAnio += d.total_recaudado || 0;
-                    if (fechaCierre.getMonth() === mesActual) {
-                        acumMes += d.total_recaudado || 0;
+                const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
+                const totalCierre = d.total_recaudado || 0;
+                const totalAutosCierre = (d.cant_pases || 0) + (d.cant_minutos || 0);
+
+                // Acumuladores
+                if (f.getFullYear() === hoy.getFullYear()) {
+                    acumAnio += totalCierre;
+                    autosAnio += totalAutosCierre;
+                    historialMeses[f.getMonth()] += totalCierre;
+
+                    if (f.getMonth() === hoy.getMonth()) {
+                        acumMes += totalCierre;
+                        autosMes += totalAutosCierre;
+                        historialDias[f.getDate()] = totalCierre;
                     }
                 }
 
-                // Datos para Gráfico (últimos 14 para no saturar)
-                if (labels.length < 14) {
-                    labels.push(d.fecha);
-                    montos.push(d.total_recaudado);
-                }
-
-                const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
+                // Generar lista visual
                 const dataEncoded = btoa(JSON.stringify(d));
                 html += `
                 <div onclick="abrirModal('${dataEncoded}')" class="flex justify-between items-center glass p-3 px-4 mb-2 active:scale-95 transition-all cursor-pointer">
                     <div class="flex flex-col">
                         <span class="font-bold text-white text-sm">${d.fecha}</span>
-                        <span class="text-[8px] text-[#00E0D0] uppercase font-bold">Ver Detalle</span>
+                        <span class="text-[8px] text-[#00E0D0] uppercase font-bold tracking-widest">Ver Reporte</span>
                     </div>
                     <div class="text-right">
-                        <span class="font-black text-[#00C853] block text-sm">$${(d.total_recaudado || 0).toLocaleString('es-CL')}</span>
-                        <span class="text-[9px] text-gray-400 italic">${vh} autos</span>
+                        <span class="font-black text-[#00C853] block text-sm">$${totalCierre.toLocaleString('es-CL')}</span>
+                        <span class="text-[9px] text-gray-400 italic">${totalAutosCierre} vh</span>
                     </div>
                 </div>`;
             });
 
-            // Actualizar Cifras Carousel (Hoy + Histórico)
-            document.getElementById('total-mes').innerText = `$${(acumMes + totalHoyGlobal).toLocaleString('es-CL')}`;
-            document.getElementById('total-anio').innerText = `$${(acumAnio + totalHoyGlobal).toLocaleString('es-CL')}`;
-            
-            document.getElementById('lista-cierres').innerHTML = html || "Sin registros históricos.";
-            actualizarGraficoSemanal(labels.reverse(), montos.reverse());
+            // Actualizar Interfaz (Hoy + Pasado)
+            document.getElementById('total-mes').innerText = `$${(acumMes + dataHoyActual.total).toLocaleString('es-CL')}`;
+            document.getElementById('total-anio').innerText = `$${(acumAnio + dataHoyActual.total).toLocaleString('es-CL')}`;
+            document.getElementById('cant-mes').innerText = (autosMes + dataHoyActual.autos);
+            document.getElementById('cant-anio').innerText = (autosAnio + dataHoyActual.autos);
+            document.getElementById('lista-cierres').innerHTML = html || "Sin registros.";
+
+            // Renderizar Gráficos B y C
+            actualizarGraficoMensual(historialDias);
+            actualizarGraficoAnual(historialMeses);
+        });
+    }
+
+    // --- FUNCIONES DE GRÁFICOS (Los Gemelos) ---
+
+    function actualizarGraficoHoy(datosHoras) {
+        const ctx = document.getElementById('chartHoy').getContext('2d');
+        const max = Math.max(...datosHoras);
+        const colors = datosHoras.map(v => (v === max && v > 0) ? '#D32F2F' : '#00E0D0');
+        
+        if (chartHoy) chartHoy.destroy();
+        chartHoy = new Chart(ctx, {
+            type: 'bar',
+            data: { 
+                labels: ['8am','9am','10am','11am','12pm','1pm','2pm','3pm','4pm','5pm','6pm','7pm','8pm'],
+                datasets: [{ data: datosHoras, backgroundColor: colors, borderRadius: 5 }] 
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
+        });
+    }
+
+    function actualizarGraficoMensual(diccionarioDias) {
+        const ctx = document.getElementById('chartMensual').getContext('2d');
+        const labels = Array.from({length: 31}, (_, i) => i + 1);
+        const data = labels.map(d => diccionarioDias[d] || 0);
+        const max = Math.max(...data);
+        
+        if (chartMensual) chartMensual.destroy();
+        chartMensual = new Chart(ctx, {
+            type: 'line',
+            data: { 
+                labels: labels,
+                datasets: [{ 
+                    data: data, 
+                    borderColor: '#00E0D0', 
+                    pointBackgroundColor: data.map(v => v === max && v > 0 ? '#D32F2F' : '#00E0D0'),
+                    pointRadius: data.map(v => v === max && v > 0 ? 5 : 2),
+                    tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.05)' 
+                }] 
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 8 } } } } }
+        });
+    }
+
+    function actualizarGraficoAnual(mesesArray) {
+        const ctx = document.getElementById('chartAnual').getContext('2d');
+        if (chartAnual) chartAnual.destroy();
+        chartAnual = new Chart(ctx, {
+            type: 'bar',
+            data: { 
+                labels: ['E','F','M','A','M','J','J','A','S','O','N','D'],
+                datasets: [{ data: mesesArray, backgroundColor: '#FFD700', borderRadius: 4 }] 
+            },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
         });
     }
 
@@ -251,22 +355,11 @@
         });
     }
 
-    function actualizarGraficoSemanal(labels, montos) {
-        const ctx = document.getElementById('chartSemanal').getContext('2d');
-        if (chartSemanal) chartSemanal.destroy();
-        chartSemanal = new Chart(ctx, {
-            type: 'line',
-            data: { labels: labels, datasets: [{ data: montos, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0, 224, 208, 0.1)' }] },
-            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 9 } } } } }
-        });
-    }
-
     window.abrirModal = function(dataEncoded) {
         const d = JSON.parse(atob(dataEncoded));
-        const vh = (d.cant_pases || 0) + (d.cant_minutos || 0);
         document.getElementById('modal-fecha').innerText = d.fecha;
         document.getElementById('modal-total').innerText = `$${(d.total_recaudado || 0).toLocaleString('es-CL')}`;
-        document.getElementById('modal-flujo-total').innerText = vh;
+        document.getElementById('modal-flujo-total').innerText = (d.cant_pases || 0) + (d.cant_minutos || 0);
         document.getElementById('modal-efectivo').innerText = `$${(d.efectivo || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-tarjeta').innerText = `$${(d.tarjeta || 0).toLocaleString('es-CL')}`;
         document.getElementById('modal-detalle').classList.remove('hidden');
