@@ -25,6 +25,7 @@
         .comp-modo.active { background: #00E0D0; color: #0A2F4F; }
         .comp-select { background: #1B263B; color: #fff; font-size: 12px; border-radius: 10px; padding: 8px; border: 1px solid #1B263B; outline: none; -webkit-appearance: none; appearance: none; }
         .comp-select:focus { border-color: #00E0D0; }
+        input.comp-select::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
     </style>
 </head>
 <body class="p-4 mb-10">
@@ -119,6 +120,11 @@
         </div>
     </div>
 
+    <div class="card border-t-4 border-[#00E0D0]">
+        <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">🔮 Proyección</h2>
+        <div id="pred-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </div>
+
     <div class="card">
         <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Comparador</h2>
         <div class="flex gap-1 mb-4 bg-[#0A2F4F] p-1 rounded-xl">
@@ -126,10 +132,15 @@
             <button data-modo="mes"  class="comp-modo flex-1 py-2 rounded-lg text-xs font-bold transition-all">Mes</button>
             <button data-modo="anio" class="comp-modo flex-1 py-2 rounded-lg text-xs font-bold transition-all">Año</button>
         </div>
-        <div class="flex items-center gap-2 mb-4">
+        <div id="comp-selects" class="flex items-center gap-2 mb-4">
             <select id="comp-a" class="comp-select flex-1"></select>
             <span class="text-gray-500 text-[10px] font-black uppercase">vs</span>
             <select id="comp-b" class="comp-select flex-1"></select>
+        </div>
+        <div id="comp-dates" class="flex items-center gap-2 mb-4" style="display:none;">
+            <input type="date" id="comp-a-date" class="comp-select flex-1">
+            <span class="text-gray-500 text-[10px] font-black uppercase">vs</span>
+            <input type="date" id="comp-b-date" class="comp-select flex-1">
         </div>
         <div id="comp-resultado"><p class="text-gray-500 italic text-center text-xs">Sin datos suficientes.</p></div>
     </div>
@@ -181,7 +192,7 @@
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
     const anioActual = new Date().getFullYear();
     const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
-    const fmt = (n) => `$${num(n).toLocaleString('es-CL')}`; // formato de miles consistente
+    const fmt = (n) => `$${Math.round(num(n)).toLocaleString('es-CL')}`; // CLP sin decimales, miles consistentes
     document.getElementById('label-anio-actual').innerText = anioActual;
 
     async function verificarClave() {
@@ -268,7 +279,7 @@
             renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
             renderBar(histM);
-            try { renderComparador(); } catch (e) { console.error('comparador:', e); }
+            try { renderComparador(); renderPredictivo(); } catch (e) { console.error('analytics:', e); }
         });
     }
 
@@ -328,7 +339,29 @@
         }), { total: 0, autos: 0, ef: 0, tj: 0, dias: 0 });
     }
 
+    // Helpers de fecha para el modo Dia (calendario nativo)
+    const isoKey = (dte) => `${dte.getFullYear()}-${String(dte.getMonth() + 1).padStart(2, '0')}-${String(dte.getDate()).padStart(2, '0')}`;
+    const cierreDeFechaISO = (iso) => iso ? (todosLosCierres.find(c => isoKey(c.date) === iso) || null) : null;
+    const fechaCortaISO = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+
+    function compToggleUI() {
+        const esDia = compModo === 'dia';
+        document.getElementById('comp-selects').style.display = esDia ? 'none' : 'flex';
+        document.getElementById('comp-dates').style.display = esDia ? 'flex' : 'none';
+    }
+
     function compLlenarSelectores() {
+        if (compModo === 'dia') {
+            if (!todosLosCierres.length) return;
+            const fechas = todosLosCierres.map(c => c.date).slice().sort((a, b) => a - b);
+            const min = isoKey(fechas[0]), max = isoKey(fechas[fechas.length - 1]);
+            const da = document.getElementById('comp-a-date'), dbb = document.getElementById('comp-b-date');
+            da.min = min; da.max = max; dbb.min = min; dbb.max = max;
+            // Por defecto: A = dia mas reciente, B = el anterior. No pisa lo que el usuario ya eligio.
+            if (!da.value) da.value = isoKey(todosLosCierres[0].date);
+            if (!dbb.value) dbb.value = isoKey((todosLosCierres[1] || todosLosCierres[0]).date);
+            return;
+        }
         const periodos = compPeriodos();
         const selA = document.getElementById('comp-a');
         const selB = document.getElementById('comp-b');
@@ -336,10 +369,27 @@
         const opts = periodos.map(p => `<option value="${p.value}">${p.label}</option>`).join('');
         selA.innerHTML = opts; selB.innerHTML = opts;
         if (periodos.length) {
-            // Por defecto: A = mas reciente, B = el periodo anterior.
             selA.value = periodos.some(p => p.value === prevA) ? prevA : periodos[0].value;
             selB.value = periodos.some(p => p.value === prevB) ? prevB : (periodos[1] || periodos[0]).value;
         }
+    }
+
+    // Devuelve {A:{label,cierres}, B:{label,cierres}} segun el modo activo.
+    function getSeleccion() {
+        if (compModo === 'dia') {
+            const va = document.getElementById('comp-a-date').value;
+            const vb = document.getElementById('comp-b-date').value;
+            const ca = cierreDeFechaISO(va), cb = cierreDeFechaISO(vb);
+            return {
+                A: { label: fechaCortaISO(va), cierres: ca ? [ca] : [], vacio: !ca },
+                B: { label: fechaCortaISO(vb), cierres: cb ? [cb] : [], vacio: !cb }
+            };
+        }
+        const periodos = compPeriodos();
+        if (!periodos.length) return null;
+        const pa = periodos.find(p => p.value === document.getElementById('comp-a').value) || periodos[0];
+        const pb = periodos.find(p => p.value === document.getElementById('comp-b').value) || periodos[Math.min(1, periodos.length - 1)];
+        return { A: pa, B: pb };
     }
 
     function compFila(label, a, b, moneda = true) {
@@ -350,7 +400,7 @@
             const col = pct > 0 ? '#00C853' : (pct < 0 ? '#F87171' : '#6B7280');
             const fl = pct > 0 ? '▲' : (pct < 0 ? '▼' : '–');
             delta = `<span style="color:${col}" class="text-[9px] font-black block">${fl} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
-        } else if (a > 0) {
+        } else if (a > 0 && compModo !== 'dia') {
             delta = '<span class="text-[9px] font-black text-[#00C853] block">nuevo</span>';
         }
         return `<div class="grid grid-cols-3 items-center py-2 border-b border-white/5">
@@ -362,28 +412,29 @@
 
     function compRender() {
         const cont = document.getElementById('comp-resultado');
-        const periodos = compPeriodos();
-        if (periodos.length < 1) {
+        const sel = getSeleccion();
+        if (!sel) {
             cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos suficientes.</p>";
             return;
         }
-        const selA = document.getElementById('comp-a'), selB = document.getElementById('comp-b');
-        const pa = periodos.find(p => p.value === selA.value) || periodos[0];
-        const pb = periodos.find(p => p.value === selB.value) || periodos[Math.min(1, periodos.length - 1)];
-        const A = compAgregar(pa.cierres), B = compAgregar(pb.cierres);
+        if (compModo === 'dia' && sel.A.vacio && sel.B.vacio) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>No hay cierres registrados en esas fechas.</p>";
+            return;
+        }
+        const A = compAgregar(sel.A.cierres), B = compAgregar(sel.B.cierres);
         const tickA = A.autos ? A.total / A.autos : 0;
         const tickB = B.autos ? B.total / B.autos : 0;
         let titulo = '';
         if (B.total > 0) {
             const pct = (A.total - B.total) / B.total * 100;
             const col = pct >= 0 ? '#00C853' : '#F87171';
-            titulo = `<div class="text-center mb-3"><span class="text-2xl font-black" style="color:${col}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span><p class="text-[9px] text-gray-400 uppercase font-bold">recaudación · ${pa.label} vs ${pb.label}</p></div>`;
+            titulo = `<div class="text-center mb-3"><span class="text-2xl font-black" style="color:${col}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span><p class="text-[9px] text-gray-400 uppercase font-bold">recaudación · ${sel.A.label} vs ${sel.B.label}</p></div>`;
         }
         cont.innerHTML = titulo + `
             <div class="grid grid-cols-3 mb-1">
                 <span></span>
-                <span class="text-center text-[9px] font-black text-[#00E0D0] uppercase truncate px-1">${pa.label}</span>
-                <span class="text-right text-[9px] font-black text-[#FFD700] uppercase truncate px-1">${pb.label}</span>
+                <span class="text-center text-[9px] font-black text-[#00E0D0] uppercase truncate px-1">${sel.A.label}</span>
+                <span class="text-right text-[9px] font-black text-[#FFD700] uppercase truncate px-1">${sel.B.label}</span>
             </div>
             ${compFila('Recaudación', A.total, B.total)}
             ${compFila('Autos', A.autos, B.autos, false)}
@@ -395,8 +446,76 @@
     }
 
     function renderComparador() {
+        compToggleUI();
         compLlenarSelectores();
         compRender();
+    }
+
+    // ---------- PREDICTIVO ----------
+    // Promedio ponderado por dia de la semana (0=Dom..6=Sab), con mas peso a lo reciente.
+    function promedioPorDiaSemana() {
+        const buckets = Array.from({ length: 7 }, () => []);
+        todosLosCierres.forEach(c => buckets[c.date.getDay()].push(c)); // ya viene mas reciente primero
+        const decay = 0.85;
+        return buckets.map(arr => {
+            if (!arr.length) return { total: 0, autos: 0, n: 0 };
+            let sw = 0, st = 0, sa = 0;
+            arr.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; });
+            return { total: st / sw, autos: sa / sw, n: arr.length };
+        });
+    }
+
+    function renderPredictivo() {
+        const cont = document.getElementById('pred-contenido');
+        if (todosLosCierres.length < 7) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Necesito más historial para proyectar.</p>";
+            return;
+        }
+        const w = promedioPorDiaSemana();
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+        // Proximo fin de semana (proximo sabado y domingo)
+        const diasASab = (6 - hoy.getDay() + 7) % 7;
+        const sab = new Date(hoy.getTime() + diasASab * 86400000);
+        const dom = new Date(sab.getTime() + 86400000);
+        const pSab = w[6], pDom = w[0];
+        const totFde = pSab.total + pDom.total;
+
+        // Proximo mes (suma de promedios por dia de semana de cada dia del mes)
+        const mesNM = (hoy.getMonth() + 1) % 12;
+        const anioNM = hoy.getMonth() === 11 ? hoy.getFullYear() + 1 : hoy.getFullYear();
+        const diasMes = new Date(anioNM, mesNM + 1, 0).getDate();
+        let totMes = 0, autosMes = 0;
+        for (let dd = 1; dd <= diasMes; dd++) {
+            const wd = new Date(anioNM, mesNM, dd).getDay();
+            totMes += w[wd].total; autosMes += w[wd].autos;
+        }
+
+        // Confianza: segun cuantas muestras hay del dia de semana con menos datos
+        const ns = w.filter(x => x.n > 0).map(x => x.n);
+        const minN = ns.length ? Math.min(...ns) : 0;
+        const conf = minN >= 6 ? { t: 'Alta', c: '#00C853' } : (minN >= 3 ? { t: 'Media', c: '#FFD700' } : { t: 'Baja', c: '#F87171' });
+        const ddmm = (dte) => `${String(dte.getDate()).padStart(2, '0')}/${String(dte.getMonth() + 1).padStart(2, '0')}`;
+
+        cont.innerHTML = `
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo fin de semana</p>
+                <p class="text-3xl font-black text-[#00E0D0]">${fmt(totFde)}</p>
+                <div class="mt-2 space-y-1">
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Sáb ${ddmm(sab)}</span><span><b class="text-white">${fmt(pSab.total)}</b> <span class="text-gray-500">· ${Math.round(pSab.autos)} autos</span></span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Dom ${ddmm(dom)}</span><span><b class="text-white">${fmt(pDom.total)}</b> <span class="text-gray-500">· ${Math.round(pDom.autos)} autos</span></span></div>
+                </div>
+            </div>
+            <div class="border-t border-white/10 pt-3">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo mes · ${MESES[mesNM]} ${anioNM}</p>
+                <p class="text-3xl font-black text-[#FFD700]">${fmt(totMes)}</p>
+                <p class="text-xs text-gray-400 mt-1">≈ ${Math.round(autosMes).toLocaleString('es-CL')} autos proyectados</p>
+            </div>
+            <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
+                <span class="text-[9px] text-gray-500 italic">Proyección según tu patrón semanal · referencial</span>
+                <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
+            </div>
+        `;
     }
 
     window.abrirModal = (idx) => {
@@ -431,6 +550,8 @@
     });
     document.getElementById('comp-a').onchange = compRender;
     document.getElementById('comp-b').onchange = compRender;
+    document.getElementById('comp-a-date').onchange = compRender;
+    document.getElementById('comp-b-date').onchange = compRender;
     document.querySelector('.comp-modo[data-modo="mes"]').classList.add('active');
 
     // Estado de sesion: Firebase Auth persiste el login en el dispositivo.
