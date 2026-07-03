@@ -156,8 +156,11 @@
     const ADMIN_EMAIL = "admin@vivequintay.cl";
 
     let charts = {};
+    let cierresData = [];   // cierres del snapshot actual (para el modal, sin btoa)
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
     const anioActual = new Date().getFullYear();
+    const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
+    const fmt = (n) => `$${num(n).toLocaleString('es-CL')}`; // formato de miles consistente
     document.getElementById('label-anio-actual').innerText = anioActual;
 
     async function verificarClave() {
@@ -187,16 +190,20 @@
         onSnapshot(doc(db, "admin_stats", fechaDoc), (ds) => {
             if (ds.exists()) {
                 const d = ds.data();
-                dataHoy = { total: d.total_hoy||0, autos: d.total_autos||0, ef: d.efectivo||0, tj: d.tarjeta||0, pases: d.cant_pases||0, minutos: d.cant_minutos||0 };
-                document.getElementById('total-hoy').innerText = `$${dataHoy.total.toLocaleString('es-CL')}`;
+                dataHoy = { total: num(d.total_hoy), autos: num(d.total_autos), ef: num(d.efectivo), tj: num(d.tarjeta), pases: num(d.cant_pases), minutos: num(d.cant_minutos) };
+                document.getElementById('total-hoy').innerText = fmt(dataHoy.total);
                 document.getElementById('cant-hoy').innerText = dataHoy.autos;
                 document.getElementById('sub-pases').innerText = dataHoy.pases;
                 document.getElementById('sub-minutos').innerText = dataHoy.minutos;
-                document.getElementById('ef-hoy').innerText = `$${dataHoy.ef.toLocaleString('es-CL')}`;
-                document.getElementById('tj-hoy').innerText = `$${dataHoy.tj.toLocaleString('es-CL')}`;
+                document.getElementById('ef-hoy').innerText = fmt(dataHoy.ef);
+                document.getElementById('tj-hoy').innerText = fmt(dataHoy.tj);
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
                 document.getElementById('hora-sincro').innerText = `Sync: ${new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})}`;
                 renderPie('chartPagosHoy', [dataHoy.ef, dataHoy.tj]);
+            } else {
+                // Aun no hay movimiento registrado hoy: evita el "Sincronizando..." eterno.
+                document.getElementById('fecha-actual').innerText = fechaDoc;
+                document.getElementById('hora-sincro').innerText = 'Sin movimiento hoy';
             }
         });
 
@@ -204,33 +211,37 @@
         onSnapshot(q, (snap) => {
             let html = "", acumM = 0, acumA = 0, autM = 0, autA = 0, efM = 0, tjM = 0;
             let histD = {}, histM = new Array(12).fill(0);
+            cierresData = [];
 
-            snap.forEach(doc => {
-                const d = doc.data();
+            snap.forEach(docSnap => {
+                const d = docSnap.data();
                 const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
+                const totalDia = num(d.total_recaudado);
+                const autosDia = num(d.cant_pases) + num(d.cant_minutos);
                 if (f.getFullYear() === anioActual) {
-                    acumA += d.total_recaudado; autA += (d.cant_pases+d.cant_minutos);
-                    histM[f.getMonth()] += d.total_recaudado;
+                    acumA += totalDia; autA += autosDia;
+                    histM[f.getMonth()] += totalDia;
                     if (f.getMonth() === hoy.getMonth()) {
-                        acumM += d.total_recaudado; autM += (d.cant_pases+d.cant_minutos);
-                        efM += d.efectivo||0; tjM += d.tarjeta||0;
-                        histD[f.getDate()] = d.total_recaudado;
+                        acumM += totalDia; autM += autosDia;
+                        efM += num(d.efectivo); tjM += num(d.tarjeta);
+                        histD[f.getDate()] = totalDia;
                     }
                 }
-                html += `<div onclick="abrirModal('${btoa(JSON.stringify(d))}')" class="flex justify-between items-center glass p-3 mb-2 active:scale-95 transition-all">
-                    <div><span class="font-bold text-sm text-white">${d.fecha}</span><br><span class="text-[8px] text-[#00E0D0] font-bold">DETALLE</span></div>
-                    <div class="text-right"><span class="font-black text-[#00C853] text-sm">$${d.total_recaudado.toLocaleString()}</span></div>
+                const idx = cierresData.push(d) - 1;   // guardamos el objeto y pasamos su indice
+                html += `<div onclick="abrirModal(${idx})" class="flex justify-between items-center glass p-3 mb-2 active:scale-95 transition-all">
+                    <div><span class="font-bold text-sm text-white">${d.fecha || '--'}</span><br><span class="text-[8px] text-[#00E0D0] font-bold">DETALLE</span></div>
+                    <div class="text-right"><span class="font-black text-[#00C853] text-sm">${fmt(totalDia)}</span></div>
                 </div>`;
             });
 
-            document.getElementById('total-mes').innerText = `$${(acumM + dataHoy.total).toLocaleString('es-CL')}`;
-            document.getElementById('total-anio').innerText = `$${(acumA + dataHoy.total).toLocaleString('es-CL')}`;
+            document.getElementById('total-mes').innerText = fmt(acumM + dataHoy.total);
+            document.getElementById('total-anio').innerText = fmt(acumA + dataHoy.total);
             document.getElementById('cant-mes').innerText = autM + dataHoy.autos;
             document.getElementById('cant-anio').innerText = autA + dataHoy.autos;
-            document.getElementById('ef-mes').innerText = `$${(efM + dataHoy.ef).toLocaleString('es-CL')}`;
-            document.getElementById('tj-mes').innerText = `$${(tjM + dataHoy.tj).toLocaleString('es-CL')}`;
-            document.getElementById('lista-cierres').innerHTML = html || "Sin datos.";
-            
+            document.getElementById('ef-mes').innerText = fmt(efM + dataHoy.ef);
+            document.getElementById('tj-mes').innerText = fmt(tjM + dataHoy.tj);
+            document.getElementById('lista-cierres').innerHTML = html || "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
+
             renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
             renderBar(histM);
@@ -267,14 +278,15 @@
         });
     }
 
-    window.abrirModal = (encoded) => {
-        const d = JSON.parse(atob(encoded));
-        document.getElementById('modal-fecha').innerText = d.fecha;
+    window.abrirModal = (idx) => {
+        const d = cierresData[idx];
+        if (!d) return;
+        document.getElementById('modal-fecha').innerText = d.fecha || '--';
         document.getElementById('modal-content').innerHTML = `
-            <div class="glass p-5 text-center"><p class="text-[10px] text-gray-400 font-black uppercase">Recaudado</p><p class="text-3xl font-black text-[#00E0D0]">$${d.total_recaudado.toLocaleString()}</p></div>
+            <div class="glass p-5 text-center"><p class="text-[10px] text-gray-400 font-black uppercase">Recaudado</p><p class="text-3xl font-black text-[#00E0D0]">${fmt(d.total_recaudado)}</p></div>
             <div class="grid grid-cols-2 gap-4">
-                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[9px] font-bold">Efectivo</p><p class="font-black">$${(d.efectivo||0).toLocaleString()}</p></div>
-                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[9px] font-bold">Tarjeta</p><p class="font-black">$${(d.tarjeta||0).toLocaleString()}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[9px] font-bold">Efectivo</p><p class="font-black">${fmt(d.efectivo)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[9px] font-bold">Tarjeta</p><p class="font-black">${fmt(d.tarjeta)}</p></div>
             </div>
         `;
         document.getElementById('modal-detalle').classList.remove('hidden');
