@@ -21,6 +21,10 @@
         @keyframes fadeInScale { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
         .modal-anim { animation: fadeInScale 0.2s ease-out forwards; }
         .glass { background: rgba(255, 255, 255, 0.05); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; }
+        .comp-modo { color: #6B7280; }
+        .comp-modo.active { background: #00E0D0; color: #0A2F4F; }
+        .comp-select { background: #1B263B; color: #fff; font-size: 12px; border-radius: 10px; padding: 8px; border: 1px solid #1B263B; outline: none; -webkit-appearance: none; appearance: none; }
+        .comp-select:focus { border-color: #00E0D0; }
     </style>
 </head>
 <body class="p-4 mb-10">
@@ -116,6 +120,21 @@
     </div>
 
     <div class="card">
+        <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Comparador</h2>
+        <div class="flex gap-1 mb-4 bg-[#0A2F4F] p-1 rounded-xl">
+            <button data-modo="dia"  class="comp-modo flex-1 py-2 rounded-lg text-xs font-bold transition-all">Día</button>
+            <button data-modo="mes"  class="comp-modo flex-1 py-2 rounded-lg text-xs font-bold transition-all">Mes</button>
+            <button data-modo="anio" class="comp-modo flex-1 py-2 rounded-lg text-xs font-bold transition-all">Año</button>
+        </div>
+        <div class="flex items-center gap-2 mb-4">
+            <select id="comp-a" class="comp-select flex-1"></select>
+            <span class="text-gray-500 text-[10px] font-black uppercase">vs</span>
+            <select id="comp-b" class="comp-select flex-1"></select>
+        </div>
+        <div id="comp-resultado"><p class="text-gray-500 italic text-center text-xs">Sin datos suficientes.</p></div>
+    </div>
+
+    <div class="card">
         <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
         <div class="history-scroll" id="lista-cierres"><p class="text-gray-500 italic text-center text-xs">Cargando...</p></div>
         <div class="fade-bottom"></div>
@@ -156,7 +175,9 @@
     const ADMIN_EMAIL = "admin@vivequintay.cl";
 
     let charts = {};
-    let cierresData = [];   // cierres del snapshot actual (para el modal, sin btoa)
+    let cierresData = [];       // cierres del snapshot actual (para el modal, sin btoa)
+    let todosLosCierres = [];   // todos los cierres normalizados (para el comparador)
+    let compModo = 'mes';       // modo activo del comparador: dia | mes | anio
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
     const anioActual = new Date().getFullYear();
     const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
@@ -212,12 +233,14 @@
             let html = "", acumM = 0, acumA = 0, autM = 0, autA = 0, efM = 0, tjM = 0;
             let histD = {}, histM = new Array(12).fill(0);
             cierresData = [];
+            todosLosCierres = [];
 
             snap.forEach(docSnap => {
                 const d = docSnap.data();
                 const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
                 const totalDia = num(d.total_recaudado);
                 const autosDia = num(d.cant_pases) + num(d.cant_minutos);
+                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta) });
                 if (f.getFullYear() === anioActual) {
                     acumA += totalDia; autA += autosDia;
                     histM[f.getMonth()] += totalDia;
@@ -245,6 +268,7 @@
             renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
             renderBar(histM);
+            try { renderComparador(); } catch (e) { console.error('comparador:', e); }
         });
     }
 
@@ -278,6 +302,103 @@
         });
     }
 
+    // ---------- COMPARADOR (dia / mes / anio) ----------
+    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    // Agrupa los cierres segun el modo activo. Devuelve periodos en orden
+    // (mas reciente primero, heredado del orden de todosLosCierres).
+    function compPeriodos() {
+        if (compModo === 'dia') {
+            return todosLosCierres.map((c, i) => ({ value: 'd' + i, label: c.fecha || c.date.toLocaleDateString('es-CL'), cierres: [c] }));
+        }
+        const map = new Map();
+        todosLosCierres.forEach(c => {
+            const key = compModo === 'mes' ? `${c.date.getFullYear()}-${c.date.getMonth()}` : `${c.date.getFullYear()}`;
+            const label = compModo === 'mes' ? `${MESES[c.date.getMonth()]} ${c.date.getFullYear()}` : `${c.date.getFullYear()}`;
+            if (!map.has(key)) map.set(key, { value: key, label, cierres: [] });
+            map.get(key).cierres.push(c);
+        });
+        return [...map.values()];
+    }
+
+    function compAgregar(cierres) {
+        return cierres.reduce((a, c) => ({
+            total: a.total + c.total, autos: a.autos + c.autos,
+            ef: a.ef + c.ef, tj: a.tj + c.tj, dias: a.dias + 1
+        }), { total: 0, autos: 0, ef: 0, tj: 0, dias: 0 });
+    }
+
+    function compLlenarSelectores() {
+        const periodos = compPeriodos();
+        const selA = document.getElementById('comp-a');
+        const selB = document.getElementById('comp-b');
+        const prevA = selA.value, prevB = selB.value;
+        const opts = periodos.map(p => `<option value="${p.value}">${p.label}</option>`).join('');
+        selA.innerHTML = opts; selB.innerHTML = opts;
+        if (periodos.length) {
+            // Por defecto: A = mas reciente, B = el periodo anterior.
+            selA.value = periodos.some(p => p.value === prevA) ? prevA : periodos[0].value;
+            selB.value = periodos.some(p => p.value === prevB) ? prevB : (periodos[1] || periodos[0]).value;
+        }
+    }
+
+    function compFila(label, a, b, moneda = true) {
+        const f = moneda ? fmt : (x) => num(x).toLocaleString('es-CL');
+        let delta = '<span class="text-[9px] text-gray-600 block">—</span>';
+        if (b > 0) {
+            const pct = (a - b) / b * 100;
+            const col = pct > 0 ? '#00C853' : (pct < 0 ? '#F87171' : '#6B7280');
+            const fl = pct > 0 ? '▲' : (pct < 0 ? '▼' : '–');
+            delta = `<span style="color:${col}" class="text-[9px] font-black block">${fl} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+        } else if (a > 0) {
+            delta = '<span class="text-[9px] font-black text-[#00C853] block">nuevo</span>';
+        }
+        return `<div class="grid grid-cols-3 items-center py-2 border-b border-white/5">
+            <span class="text-[9px] text-gray-400 font-bold uppercase">${label}</span>
+            <span class="text-center text-sm font-black text-white">${f(a)}</span>
+            <div class="text-right"><span class="text-sm font-bold text-gray-300">${f(b)}</span>${delta}</div>
+        </div>`;
+    }
+
+    function compRender() {
+        const cont = document.getElementById('comp-resultado');
+        const periodos = compPeriodos();
+        if (periodos.length < 1) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos suficientes.</p>";
+            return;
+        }
+        const selA = document.getElementById('comp-a'), selB = document.getElementById('comp-b');
+        const pa = periodos.find(p => p.value === selA.value) || periodos[0];
+        const pb = periodos.find(p => p.value === selB.value) || periodos[Math.min(1, periodos.length - 1)];
+        const A = compAgregar(pa.cierres), B = compAgregar(pb.cierres);
+        const tickA = A.autos ? A.total / A.autos : 0;
+        const tickB = B.autos ? B.total / B.autos : 0;
+        let titulo = '';
+        if (B.total > 0) {
+            const pct = (A.total - B.total) / B.total * 100;
+            const col = pct >= 0 ? '#00C853' : '#F87171';
+            titulo = `<div class="text-center mb-3"><span class="text-2xl font-black" style="color:${col}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span><p class="text-[9px] text-gray-400 uppercase font-bold">recaudación · ${pa.label} vs ${pb.label}</p></div>`;
+        }
+        cont.innerHTML = titulo + `
+            <div class="grid grid-cols-3 mb-1">
+                <span></span>
+                <span class="text-center text-[9px] font-black text-[#00E0D0] uppercase truncate px-1">${pa.label}</span>
+                <span class="text-right text-[9px] font-black text-[#FFD700] uppercase truncate px-1">${pb.label}</span>
+            </div>
+            ${compFila('Recaudación', A.total, B.total)}
+            ${compFila('Autos', A.autos, B.autos, false)}
+            ${compFila('Ticket prom.', Math.round(tickA), Math.round(tickB))}
+            ${compFila('Efectivo', A.ef, B.ef)}
+            ${compFila('Tarjeta', A.tj, B.tj)}
+            ${compModo !== 'dia' ? compFila('Días con datos', A.dias, B.dias, false) : ''}
+        `;
+    }
+
+    function renderComparador() {
+        compLlenarSelectores();
+        compRender();
+    }
+
     window.abrirModal = (idx) => {
         const d = cierresData[idx];
         if (!d) return;
@@ -299,6 +420,18 @@
     document.getElementById('input-pass').addEventListener('keydown', (e) => {
         if (e.key === 'Enter') verificarClave();
     });
+
+    // Eventos del comparador
+    document.querySelectorAll('.comp-modo').forEach(btn => {
+        btn.onclick = () => {
+            compModo = btn.dataset.modo;
+            document.querySelectorAll('.comp-modo').forEach(b => b.classList.toggle('active', b === btn));
+            renderComparador();
+        };
+    });
+    document.getElementById('comp-a').onchange = compRender;
+    document.getElementById('comp-b').onchange = compRender;
+    document.querySelector('.comp-modo[data-modo="mes"]').classList.add('active');
 
     // Estado de sesion: Firebase Auth persiste el login en el dispositivo.
     // Si ya inicio sesion antes, entra directo; si no, muestra el bloqueo.
