@@ -248,6 +248,7 @@
         onSnapshot(q, (snap) => {
             let html = "", acumM = 0, acumA = 0, autM = 0, autA = 0, efM = 0, tjM = 0;
             let histD = {}, histM = new Array(12).fill(0);
+            let histMPrev = new Array(12).fill(0), prevMeses = new Set();
             cierresData = [];
             todosLosCierres = [];
 
@@ -265,6 +266,9 @@
                         efM += num(d.efectivo); tjM += num(d.tarjeta);
                         histD[f.getDate()] = totalDia;
                     }
+                } else if (f.getFullYear() === anioActual - 1) {
+                    histMPrev[f.getMonth()] += totalDia;
+                    prevMeses.add(f.getMonth());
                 }
                 const idx = cierresData.push(d) - 1;   // guardamos el objeto y pasamos su indice
                 html += `<div onclick="abrirModal(${idx})" class="flex justify-between items-center glass p-3 mb-2 active:scale-95 transition-all">
@@ -283,7 +287,7 @@
 
             renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
-            renderBar(histM);
+            renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
             try { renderComparador(); renderPredictivo(); renderTendencias(); } catch (e) { console.error('analytics:', e); }
         });
     }
@@ -309,12 +313,24 @@
         });
     }
 
-    function renderBar(arr) {
+    function renderBar(arr, arrPrev) {
         if (charts.bar) charts.bar.destroy();
+        const hayPrev = arrPrev && arrPrev.some(v => v != null && v > 0);
+        const datasets = [{ type: 'bar', label: String(anioActual), data: arr, backgroundColor: '#FFD700', borderRadius: 4, order: 2 }];
+        if (hayPrev) {
+            datasets.unshift({
+                type: 'line', label: String(anioActual - 1), data: arrPrev,
+                borderColor: '#00E0D0', borderWidth: 2, tension: 0.35, pointRadius: 2,
+                fill: false, spanGaps: false, order: 1
+            });
+        }
         charts.bar = new Chart(document.getElementById('chartAnual'), {
             type: 'bar',
-            data: { labels: ['E','F','M','A','M','J','J','A','S','O','N','D'], datasets: [{ data: arr, backgroundColor: '#FFD700', borderRadius: 4 }] },
-            options: { plugins: { legend: false }, scales: { y: { display: false } } }
+            data: { labels: ['E','F','M','A','M','J','J','A','S','O','N','D'], datasets },
+            options: {
+                plugins: { legend: hayPrev ? { display: true, labels: { color: '#9CA3AF', font: { size: 9 }, boxWidth: 10, padding: 8 } } : { display: false } },
+                scales: { y: { display: false } }
+            }
         });
     }
 
