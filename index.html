@@ -146,6 +146,11 @@
     </div>
 
     <div class="card">
+        <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Tendencias</h2>
+        <div id="tend-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </div>
+
+    <div class="card">
         <h2 class="mb-4 text-[10px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
         <div class="history-scroll" id="lista-cierres"><p class="text-gray-500 italic text-center text-xs">Cargando...</p></div>
         <div class="fade-bottom"></div>
@@ -279,7 +284,7 @@
             renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
             renderBar(histM);
-            try { renderComparador(); renderPredictivo(); } catch (e) { console.error('analytics:', e); }
+            try { renderComparador(); renderPredictivo(); renderTendencias(); } catch (e) { console.error('analytics:', e); }
         });
     }
 
@@ -514,6 +519,83 @@
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
                 <span class="text-[9px] text-gray-500 italic">Proyección según tu patrón semanal · referencial</span>
                 <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
+            </div>
+        `;
+    }
+
+    // ---------- TENDENCIAS / RANKINGS ----------
+    function renderTendencias() {
+        const cont = document.getElementById('tend-contenido');
+        if (!todosLosCierres.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
+            return;
+        }
+        const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const buckets = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }));
+        let totG = 0, autosG = 0, efG = 0, tjG = 0;
+        todosLosCierres.forEach(c => {
+            const b = buckets[c.date.getDay()]; b.sum += c.total; b.n++;
+            totG += c.total; autosG += c.autos; efG += c.ef; tjG += c.tj;
+        });
+        const ranking = buckets.map((b, i) => ({ dia: DIAS[i], avg: b.n ? b.sum / b.n : 0, n: b.n }))
+            .filter(x => x.n > 0).sort((a, b) => b.avg - a.avg);
+        const maxAvg = ranking.length ? ranking[0].avg : 1;
+
+        // Crecimiento: ultimos 30 dias vs los 30 previos
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const D30 = 30 * 86400000;
+        let win1 = 0, win2 = 0;
+        todosLosCierres.forEach(c => {
+            const diff = hoy - c.date;
+            if (diff >= 0 && diff < D30) win1 += c.total;
+            else if (diff >= D30 && diff < 2 * D30) win2 += c.total;
+        });
+        const growth = win2 > 0 ? (win1 - win2) / win2 * 100 : null;
+
+        // Dias record (top 5). Los indices estan alineados con cierresData -> abrirModal.
+        const records = [...todosLosCierres.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+
+        const ticketG = autosG ? totG / autosG : 0;
+        const pctTarjeta = (efG + tjG) > 0 ? tjG / (efG + tjG) * 100 : 0;
+
+        const rankHtml = ranking.map((r, i) => `
+            <div class="flex items-center gap-2 py-1">
+                <span class="text-[10px] w-16 ${i === 0 ? 'text-[#00E0D0] font-black' : 'text-gray-400 font-bold'}">${i === 0 ? '🏆 ' : ''}${r.dia}</span>
+                <div class="flex-1 bg-white/5 rounded-full h-2 overflow-hidden"><div class="h-full rounded-full" style="width:${(r.avg / maxAvg * 100).toFixed(0)}%;background:${i === 0 ? '#00E0D0' : '#2C5170'}"></div></div>
+                <span class="text-[10px] font-bold text-white w-20 text-right">${fmt(r.avg)}</span>
+            </div>`).join('');
+
+        const recHtml = records.map(([idx, c], i) => `
+            <div onclick="abrirModal(${idx})" class="flex justify-between items-center py-1.5 active:scale-95 transition-all cursor-pointer">
+                <span class="text-xs text-gray-300"><span class="text-gray-500 font-black">${i + 1}.</span> ${c.fecha || c.date.toLocaleDateString('es-CL')}</span>
+                <span class="text-xs font-black text-[#00C853]">${fmt(c.total)}</span>
+            </div>`).join('');
+
+        let growthHtml = '';
+        if (growth !== null) {
+            const col = growth >= 0 ? '#00C853' : '#F87171';
+            const fl = growth >= 0 ? '▲' : '▼';
+            growthHtml = `
+                <div class="mb-4">
+                    <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Crecimiento · últimos 30 días</p>
+                    <span class="text-3xl font-black" style="color:${col}">${fl} ${growth >= 0 ? '+' : ''}${growth.toFixed(1)}%</span>
+                    <p class="text-[10px] text-gray-500 mt-1">${fmt(win1)} vs ${fmt(win2)} (30 días previos)</p>
+                </div>`;
+        }
+
+        cont.innerHTML = `
+            ${growthHtml}
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-2">Ranking por día (promedio)</p>
+                ${rankHtml}
+            </div>
+            <div class="mb-3 border-t border-white/10 pt-3">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Días récord · toca para detalle</p>
+                ${recHtml}
+            </div>
+            <div class="grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Ticket promedio</p><p class="text-lg font-black text-white">${fmt(ticketG)}</p></div>
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">% Tarjeta</p><p class="text-lg font-black text-[#00E0D0]">${pctTarjeta.toFixed(0)}%</p></div>
             </div>
         `;
     }
