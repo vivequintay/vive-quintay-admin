@@ -1,0 +1,64 @@
+rules_version = '2';
+
+// =============================================================
+//  Vive Quintay - Reglas de seguridad Firestore
+//  Proyecto: vive-quintay-spa
+//
+//  Modelo:
+//   - Datos OPERATIVOS (patentes): accesibles para el Verificador
+//     de terreno, que funciona sin login. Baja sensibilidad.
+//   - Datos FINANCIEROS (recaudacion, cierres, stats): SOLO lectura
+//     para el admin autenticado. Nadie mas.
+//   - El programa Python (caja) escribe con service account /
+//     Admin SDK, que IGNORA estas reglas: sus escrituras no se ven
+//     afectadas por los "allow write: if false".
+// =============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Correo de la cuenta de administrador (creada en Firebase Auth).
+    // Si cambias el correo, actualizalo aqui y en index.html (ADMIN_EMAIL).
+    function isAdmin() {
+      return request.auth != null
+          && request.auth.token.email == 'admin@vivequintay.cl';
+    }
+
+    // ---------- OPERATIVO (Verificador, sin login) ----------
+
+    // Patentes activas: los trabajadores leen y registran tickets.
+    match /activos/{doc} {
+      allow read, write: if true;
+    }
+
+    // Listas de configuracion operativa (blacklist / frecuentes):
+    // los trabajadores solo LEEN. Escribe unicamente Python (Admin SDK).
+    match /config/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+
+    // ---------- FINANCIERO (solo admin autenticado) ----------
+
+    match /historico_cierres/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /admin_stats/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    match /configuracion/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // ---------- Todo lo demas: cerrado ----------
+    // (Firestore ya niega por defecto lo no declarado; esto lo deja explicito.)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

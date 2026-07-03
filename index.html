@@ -30,9 +30,12 @@
             <h1 class="text-2xl font-bold text-[#00E0D0] tracking-tight uppercase">VIVE QUINTAY</h1>
             <p class="text-gray-400 text-[10px] uppercase tracking-widest font-bold">Business Intelligence</p>
         </div>
-        <div class="text-right">
-            <span id="fecha-actual" class="text-xs font-semibold block text-white">--/--/--</span>
-            <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando...</span>
+        <div class="flex items-center gap-3">
+            <div class="text-right">
+                <span id="fecha-actual" class="text-xs font-semibold block text-white">--/--/--</span>
+                <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando...</span>
+            </div>
+            <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 hover:text-[#00E0D0] text-xl leading-none transition-colors">&#128274;</button>
         </div>
     </header>
 
@@ -121,7 +124,7 @@
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
         <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic tracking-tighter">VIVE QUINTAY</h1>
         <div class="w-full max-w-xs">
-            <input type="password" id="input-pass" placeholder="PIN" class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
+            <input type="password" id="input-pass" inputmode="numeric" autocomplete="current-password" placeholder="CLAVE" class="w-full p-4 rounded-2xl bg-[#1B263B] border-2 border-[#1B263B] text-white text-center text-3xl mb-4 focus:border-[#00E0D0] transition-all focus:outline-none">
             <button id="btn-entrar" class="w-full p-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-2xl">INGRESAR</button>
             <p id="error-pass" class="text-red-400 text-xs mt-4 text-center hidden font-bold">ACCESO DENEGADO</p>
         </div>
@@ -140,11 +143,17 @@
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Cuenta de administrador (creada en Firebase Auth > Email/Password).
+    // Debe coincidir con el correo definido en firestore.rules (isAdmin).
+    const ADMIN_EMAIL = "admin@vivequintay.cl";
 
     let charts = {};
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
@@ -152,13 +161,23 @@
     document.getElementById('label-anio-actual').innerText = anioActual;
 
     async function verificarClave() {
-        const pass = document.getElementById('input-pass').value;
-        const docSnap = await getDoc(doc(db, "configuracion", "seguridad"));
-        if (docSnap.exists() && pass.toString() === docSnap.data().pin.toString()) {
-            document.getElementById('pantalla-bloqueo').style.display = 'none';
-            sessionStorage.setItem('autenticado_admin', 'true');
-            iniciarEscuchas();
-        } else { document.getElementById('error-pass').classList.remove('hidden'); }
+        const clave = document.getElementById('input-pass').value.trim();
+        const errEl = document.getElementById('error-pass');
+        const btn = document.getElementById('btn-entrar');
+        errEl.classList.add('hidden');
+        if (!clave) return;
+        btn.disabled = true; btn.innerText = "VERIFICANDO...";
+        try {
+            // Login real contra Firebase Auth. La persistencia por defecto
+            // mantiene la sesion en este dispositivo (no pide clave cada vez).
+            await signInWithEmailAndPassword(auth, ADMIN_EMAIL, clave);
+            // onAuthStateChanged se encarga de mostrar el panel.
+        } catch (e) {
+            errEl.classList.remove('hidden');
+        } finally {
+            btn.disabled = false; btn.innerText = "INGRESAR";
+            document.getElementById('input-pass').value = "";
+        }
     }
 
     function iniciarEscuchas() {
@@ -262,11 +281,25 @@
     };
 
     window.cerrarModal = () => document.getElementById('modal-detalle').classList.add('hidden');
+    window.cerrarSesion = () => signOut(auth);
+
     document.getElementById('btn-entrar').onclick = verificarClave;
-    if (sessionStorage.getItem('autenticado_admin') === 'true') {
-        document.getElementById('pantalla-bloqueo').style.display = 'none';
-        iniciarEscuchas();
-    }
+    document.getElementById('input-pass').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') verificarClave();
+    });
+
+    // Estado de sesion: Firebase Auth persiste el login en el dispositivo.
+    // Si ya inicio sesion antes, entra directo; si no, muestra el bloqueo.
+    let escuchasIniciadas = false;
+    onAuthStateChanged(auth, (user) => {
+        const lock = document.getElementById('pantalla-bloqueo');
+        if (user && user.email === ADMIN_EMAIL) {
+            lock.style.display = 'none';
+            if (!escuchasIniciadas) { escuchasIniciadas = true; iniciarEscuchas(); }
+        } else {
+            lock.style.display = 'flex';
+        }
+    });
 </script>
 </body>
 </html>
