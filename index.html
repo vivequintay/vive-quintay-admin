@@ -532,10 +532,11 @@
         } else if (a > 0 && compModo !== 'dia') {
             delta = '<span class="text-[9px] font-black text-[#00C853] block">nuevo</span>';
         }
+        // El delta describe a la columna A respecto de B, por eso va DEBAJO de A.
         return `<div class="grid grid-cols-3 items-center py-2 border-b border-white/5">
             <span class="text-[9px] text-gray-400 font-bold uppercase">${label}</span>
-            <span class="text-center text-sm font-black text-white">${f(a)}</span>
-            <div class="text-right"><span class="text-sm font-bold text-gray-300">${f(b)}</span>${delta}</div>
+            <div class="text-center"><span class="text-sm font-black text-white">${f(a)}</span>${delta}</div>
+            <span class="text-right text-sm font-bold text-gray-300">${f(b)}</span>
         </div>`;
     }
 
@@ -581,16 +582,37 @@
     }
 
     // ---------- PREDICTIVO ----------
-    // Promedio ponderado por dia de la semana (0=Dom..6=Sab), con mas peso a lo reciente.
-    function promedioPorDiaSemana() {
-        const buckets = Array.from({ length: 7 }, () => []);
-        todosLosCierres.forEach(c => buckets[c.date.getDay()].push(c)); // ya viene mas reciente primero
-        const decay = 0.85;
-        return buckets.map(arr => {
-            if (!arr.length) return { total: 0, autos: 0, pases: 0, minutos: 0, n: 0 };
+    // Por cada dia de la semana (0=Dom..6=Sab) mira las ultimas K ocurrencias
+    // de CALENDARIO (haya habido cierre o no) y devuelve:
+    //  - rate: frecuencia real de apertura (0..1) en esa ventana
+    //  - total/autos/...: promedio ponderado SOLO de los dias trabajados
+    // Asi un martes de invierno (sin aperturas recientes) proyecta ~0 aunque
+    // en enero/febrero se haya trabajado entre semana.
+    function statsPorDiaSemana() {
+        const K = 8;        // ~2 meses hacia atras por dia de semana
+        const decay = 0.85; // mas peso a lo reciente
+        const key = (dt) => dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate();
+        const porFecha = new Map(todosLosCierres.map(c => [key(c.date), c]));
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const primera = new Date(todosLosCierres.length ? todosLosCierres[todosLosCierres.length - 1].date : hoy);
+        primera.setHours(0, 0, 0, 0);
+        return Array.from({ length: 7 }, (_, wd) => {
+            // ultima ocurrencia de este dia de semana ANTERIOR a hoy (hoy queda fuera: dia incompleto)
+            const d = new Date(hoy);
+            d.setDate(d.getDate() - (((hoy.getDay() - wd + 7) % 7) || 7));
+            const abiertos = [];
+            let n = 0;
+            while (n < K && d >= primera) {
+                n++;
+                const c = porFecha.get(key(d));
+                if (c) abiertos.push(c); // queda ordenado mas reciente primero
+                d.setDate(d.getDate() - 7);
+            }
+            const rate = n ? abiertos.length / n : 0;
+            if (!abiertos.length) return { rate: 0, total: 0, autos: 0, pases: 0, minutos: 0, n, nAb: 0 };
             let sw = 0, st = 0, sa = 0, sp = 0, sm = 0;
-            arr.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
-            return { total: st / sw, autos: sa / sw, pases: sp / sw, minutos: sm / sw, n: arr.length };
+            abiertos.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
+            return { rate, total: st / sw, autos: sa / sw, pases: sp / sw, minutos: sm / sw, n, nAb: abiertos.length };
         });
     }
 
@@ -600,26 +622,31 @@
             cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Necesito más historial para proyectar.</p>";
             return;
         }
-        const w = promedioPorDiaSemana();
+        const w = statsPorDiaSemana();
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
 
-        // Proximo fin de semana (proximo sabado y domingo)
+        // Proximo fin de semana: monto SI SE ABRE (el clima lo decides tu).
         const diasASab = (6 - hoy.getDay() + 7) % 7;
         const sab = new Date(hoy.getTime() + diasASab * 86400000);
         const dom = new Date(sab.getTime() + 86400000);
         const pSab = w[6], pDom = w[0];
         const totFde = pSab.total + pDom.total;
 
-        // Proximo mes (suma de promedios por dia de semana de cada dia del mes)
+        // Proximo mes: valor ESPERADO por dia = promedio x frecuencia de
+        // apertura reciente. Un martes que no se abre hace 8 semanas aporta 0.
         const mesNM = (hoy.getMonth() + 1) % 12;
         const anioNM = hoy.getMonth() === 11 ? hoy.getFullYear() + 1 : hoy.getFullYear();
         const diasMes = new Date(anioNM, mesNM + 1, 0).getDate();
-        let totMes = 0, autosMes = 0, pasesMes = 0, minutosMes = 0;
+        let totMes = 0, autosMes = 0, pasesMes = 0, minutosMes = 0, diasApertura = 0;
         for (let dd = 1; dd <= diasMes; dd++) {
-            const wd = new Date(anioNM, mesNM, dd).getDay();
-            totMes += w[wd].total; autosMes += w[wd].autos;
-            pasesMes += w[wd].pases; minutosMes += w[wd].minutos;
+            const s = w[new Date(anioNM, mesNM, dd).getDay()];
+            totMes += s.rate * s.total; autosMes += s.rate * s.autos;
+            pasesMes += s.rate * s.pases; minutosMes += s.rate * s.minutos;
+            diasApertura += s.rate;
         }
+        // Enero/febrero se trabaja casi a diario: la frecuencia de invierno subestima.
+        const avisoTemporada = (mesNM === 0 || mesNM === 1)
+            ? `<p class="text-[9px] text-[#FFD700] mt-1">⚠ Mes de temporada alta: puede quedar subestimado (se basa en la frecuencia de apertura reciente).</p>` : '';
 
         // Desglose estimado pase diario vs por minuto (% y numero de autos)
         const splitLine = (pases, minutos) => {
@@ -631,8 +658,9 @@
             </div>`;
         };
 
-        // Confianza: segun cuantas muestras hay del dia de semana con menos datos
-        const ns = w.filter(x => x.n > 0).map(x => x.n);
+        // Confianza: segun cuantas muestras reales hay del dia de semana
+        // (solo dias que si se abren) con menos datos
+        const ns = w.filter(x => x.nAb > 0).map(x => x.nAb);
         const minN = ns.length ? Math.min(...ns) : 0;
         const conf = minN >= 6 ? { t: 'Alta', c: '#00C853' } : (minN >= 3 ? { t: 'Media', c: '#FFD700' } : { t: 'Baja', c: '#F87171' });
         const ddmm = (dte) => `${String(dte.getDate()).padStart(2, '0')}/${String(dte.getMonth() + 1).padStart(2, '0')}`;
@@ -650,11 +678,12 @@
             <div class="border-t border-white/10 pt-3">
                 <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo mes · ${MESES[mesNM]} ${anioNM}</p>
                 <p class="text-3xl font-black text-[#FFD700]">${fmt(totMes)}</p>
-                <p class="text-xs text-gray-400 mt-1">≈ ${Math.round(autosMes).toLocaleString('es-CL')} autos proyectados</p>
+                <p class="text-xs text-gray-400 mt-1">≈ ${Math.round(autosMes).toLocaleString('es-CL')} autos · ${Math.round(diasApertura)} días de apertura estimados</p>
+                ${avisoTemporada}
                 ${splitLine(pasesMes, minutosMes)}
             </div>
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
-                <span class="text-[9px] text-gray-500 italic">Proyección según tu patrón semanal · referencial</span>
+                <span class="text-[9px] text-gray-500 italic">Según tu patrón y frecuencia de apertura recientes (~8 sem.) · no considera feriados · referencial</span>
                 <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
             </div>
         `;
