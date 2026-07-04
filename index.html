@@ -106,7 +106,11 @@
 
     <div class="card p-0 overflow-hidden">
         <div class="carousel-container">
-            <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento HOY (Hora Punta)</h2><canvas id="chartHoy" style="max-height: 180px;"></canvas></div>
+            <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento HOY (Hora Punta)</h2>
+                <div class="flex flex-col items-center justify-center text-center px-4" style="min-height:150px;">
+                    <span class="text-3xl mb-3 opacity-60">⏰</span>
+                    <p class="text-gray-500 text-xs italic leading-relaxed">El desglose por hora se activará cuando la caja (Python) registre los datos horarios.</p>
+                </div></div>
             <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento MENSUAL (Días)</h2><canvas id="chartMensual" style="max-height: 180px;"></canvas></div>
             <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento ANUAL (Meses)</h2><canvas id="chartAnual" style="max-height: 180px;"></canvas></div>
         </div>
@@ -212,6 +216,8 @@
     let todosLosCierres = [];   // todos los cierres normalizados (para el comparador)
     let compModo = 'mes';       // modo activo del comparador: dia | mes | anio
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
+    let cierreHoy = null;   // cierre de HOY si la jornada ya cerro (para no mostrar 0)
+    let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
     const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
     const fmt = (n) => `$${Math.round(num(n)).toLocaleString('es-CL')}`; // CLP sin decimales, miles consistentes
@@ -273,6 +279,35 @@
         }
     }
 
+    // Pinta la tarjeta "Hoy". Si la jornada esta abierta usa los datos en vivo;
+    // si ya cerro, muestra los totales del cierre de hoy (en vez de 0). No afecta acumulados.
+    function actualizarHoy() {
+        const abierta = dataHoy.total > 0 || dataHoy.autos > 0;
+        const src = abierta ? dataHoy : (cierreHoy || dataHoy);
+        animateNum('total-hoy', src.total, true);
+        animateNum('cant-hoy', src.autos, false);
+        document.getElementById('sub-pases').innerText = num(src.pases).toLocaleString('es-CL');
+        document.getElementById('sub-minutos').innerText = num(src.minutos).toLocaleString('es-CL');
+        document.getElementById('ef-hoy').innerText = fmt(src.ef);
+        document.getElementById('tj-hoy').innerText = fmt(src.tj);
+        renderPie('chartPagosHoy', [src.ef, src.tj]);
+        const sinc = document.getElementById('hora-sincro');
+        if (abierta) sinc.innerText = `Sync: ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`;
+        else if (cierreHoy) sinc.innerText = '✓ Jornada cerrada';
+        else sinc.innerText = 'Sin movimiento hoy';
+    }
+
+    // Pinta los acumulados mes/anio combinando el historico con la jornada de hoy en vivo.
+    function pintarAcumulados() {
+        animateNum('total-mes', acum.M + dataHoy.total, true);
+        animateNum('total-anio', acum.A + dataHoy.total, true);
+        animateNum('cant-mes', acum.autM + dataHoy.autos, false);
+        animateNum('cant-anio', acum.autA + dataHoy.autos, false);
+        document.getElementById('ef-mes').innerText = fmt(acum.efM + dataHoy.ef);
+        document.getElementById('tj-mes').innerText = fmt(acum.tjM + dataHoy.tj);
+        renderPie('chartPagosMes', [acum.efM + dataHoy.ef, acum.tjM + dataHoy.tj]);
+    }
+
     function iniciarEscuchas() {
         const hoy = new Date();
         const fechaDoc = `${String(hoy.getDate()).padStart(2, '0')}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${hoy.getFullYear()}`;
@@ -281,20 +316,13 @@
             if (ds.exists()) {
                 const d = ds.data();
                 dataHoy = { total: num(d.total_hoy), autos: num(d.total_autos), ef: num(d.efectivo), tj: num(d.tarjeta), pases: num(d.cant_pases), minutos: num(d.cant_minutos) };
-                animateNum('total-hoy', dataHoy.total, true);
-                animateNum('cant-hoy', dataHoy.autos, false);
-                document.getElementById('sub-pases').innerText = dataHoy.pases;
-                document.getElementById('sub-minutos').innerText = dataHoy.minutos;
-                document.getElementById('ef-hoy').innerText = fmt(dataHoy.ef);
-                document.getElementById('tj-hoy').innerText = fmt(dataHoy.tj);
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
-                document.getElementById('hora-sincro').innerText = `Sync: ${new Date().toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'})}`;
-                renderPie('chartPagosHoy', [dataHoy.ef, dataHoy.tj]);
             } else {
-                // Aun no hay movimiento registrado hoy: evita el "Sincronizando..." eterno.
+                dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
                 document.getElementById('fecha-actual').innerText = fechaDoc;
-                document.getElementById('hora-sincro').innerText = 'Sin movimiento hoy';
             }
+            actualizarHoy();
+            pintarAcumulados();
         });
 
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"));
@@ -304,13 +332,18 @@
             let histMPrev = new Array(12).fill(0), prevMeses = new Set();
             cierresData = [];
             todosLosCierres = [];
+            cierreHoy = null;
 
             snap.forEach(docSnap => {
                 const d = docSnap.data();
                 const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
                 const totalDia = num(d.total_recaudado);
-                const autosDia = num(d.cant_pases) + num(d.cant_minutos);
-                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta) });
+                const pasesDia = num(d.cant_pases), minutosDia = num(d.cant_minutos);
+                const autosDia = pasesDia + minutosDia;
+                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia });
+                if (f.getFullYear() === hoy.getFullYear() && f.getMonth() === hoy.getMonth() && f.getDate() === hoy.getDate()) {
+                    cierreHoy = { total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia };
+                }
                 if (f.getFullYear() === anioActual) {
                     acumA += totalDia; autA += autosDia;
                     histM[f.getMonth()] += totalDia;
@@ -330,15 +363,11 @@
                 </div>`;
             });
 
-            animateNum('total-mes', acumM + dataHoy.total, true);
-            animateNum('total-anio', acumA + dataHoy.total, true);
-            animateNum('cant-mes', autM + dataHoy.autos, false);
-            animateNum('cant-anio', autA + dataHoy.autos, false);
-            document.getElementById('ef-mes').innerText = fmt(efM + dataHoy.ef);
-            document.getElementById('tj-mes').innerText = fmt(tjM + dataHoy.tj);
+            acum = { M: acumM, A: acumA, autM, autA, efM, tjM };
+            pintarAcumulados();
+            actualizarHoy();  // por si el cierre de hoy acaba de aparecer
             document.getElementById('lista-cierres').innerHTML = html || "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
 
-            renderPie('chartPagosMes', [efM + dataHoy.ef, tjM + dataHoy.tj]);
             renderLine(histD);
             renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
             try { renderComparador(); renderPredictivo(); renderTendencias(); } catch (e) { console.error('analytics:', e); }
@@ -532,10 +561,10 @@
         todosLosCierres.forEach(c => buckets[c.date.getDay()].push(c)); // ya viene mas reciente primero
         const decay = 0.85;
         return buckets.map(arr => {
-            if (!arr.length) return { total: 0, autos: 0, n: 0 };
-            let sw = 0, st = 0, sa = 0;
-            arr.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; });
-            return { total: st / sw, autos: sa / sw, n: arr.length };
+            if (!arr.length) return { total: 0, autos: 0, pases: 0, minutos: 0, n: 0 };
+            let sw = 0, st = 0, sa = 0, sp = 0, sm = 0;
+            arr.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
+            return { total: st / sw, autos: sa / sw, pases: sp / sw, minutos: sm / sw, n: arr.length };
         });
     }
 
@@ -559,11 +588,22 @@
         const mesNM = (hoy.getMonth() + 1) % 12;
         const anioNM = hoy.getMonth() === 11 ? hoy.getFullYear() + 1 : hoy.getFullYear();
         const diasMes = new Date(anioNM, mesNM + 1, 0).getDate();
-        let totMes = 0, autosMes = 0;
+        let totMes = 0, autosMes = 0, pasesMes = 0, minutosMes = 0;
         for (let dd = 1; dd <= diasMes; dd++) {
             const wd = new Date(anioNM, mesNM, dd).getDay();
             totMes += w[wd].total; autosMes += w[wd].autos;
+            pasesMes += w[wd].pases; minutosMes += w[wd].minutos;
         }
+
+        // Desglose estimado pase diario vs por minuto (% y numero de autos)
+        const splitLine = (pases, minutos) => {
+            const p = Math.round(pases), m = Math.round(minutos), tot = p + m;
+            const pp = tot ? Math.round(p / tot * 100) : 0, pm = tot ? 100 - pp : 0;
+            return `<div class="flex gap-2 mt-2">
+                <div class="flex-1 bg-white/5 rounded-lg p-2 border-l-4 border-[#FFD700]"><p class="text-[8px] text-gray-400 font-black uppercase">Pase diario</p><p class="text-sm font-black text-white">${p} <span class="text-[10px] text-gray-500">${pp}%</span></p></div>
+                <div class="flex-1 bg-white/5 rounded-lg p-2 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 font-black uppercase">Por minuto</p><p class="text-sm font-black text-white">${m} <span class="text-[10px] text-gray-500">${pm}%</span></p></div>
+            </div>`;
+        };
 
         // Confianza: segun cuantas muestras hay del dia de semana con menos datos
         const ns = w.filter(x => x.n > 0).map(x => x.n);
@@ -579,11 +619,13 @@
                     <div class="flex justify-between text-xs"><span class="text-gray-400">Sáb ${ddmm(sab)}</span><span><b class="text-white">${fmt(pSab.total)}</b> <span class="text-gray-500">· ${Math.round(pSab.autos)} autos</span></span></div>
                     <div class="flex justify-between text-xs"><span class="text-gray-400">Dom ${ddmm(dom)}</span><span><b class="text-white">${fmt(pDom.total)}</b> <span class="text-gray-500">· ${Math.round(pDom.autos)} autos</span></span></div>
                 </div>
+                ${splitLine(pSab.pases + pDom.pases, pSab.minutos + pDom.minutos)}
             </div>
             <div class="border-t border-white/10 pt-3">
                 <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo mes · ${MESES[mesNM]} ${anioNM}</p>
                 <p class="text-3xl font-black text-[#FFD700]">${fmt(totMes)}</p>
                 <p class="text-xs text-gray-400 mt-1">≈ ${Math.round(autosMes).toLocaleString('es-CL')} autos proyectados</p>
+                ${splitLine(pasesMes, minutosMes)}
             </div>
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
                 <span class="text-[9px] text-gray-500 italic">Proyección según tu patrón semanal · referencial</span>
@@ -672,12 +714,29 @@
     window.abrirModal = (idx) => {
         const d = cierresData[idx];
         if (!d) return;
+        const pases = num(d.cant_pases), minutos = num(d.cant_minutos), autos = pases + minutos;
+        const ticket = autos ? num(d.total_recaudado) / autos : 0;
+        const pct = (x) => autos ? Math.round(x / autos * 100) : 0;
         document.getElementById('modal-fecha').innerText = d.fecha || '--';
         document.getElementById('modal-content').innerHTML = `
             <div class="glass p-5 text-center"><p class="text-[10px] text-gray-400 font-black uppercase">Recaudado</p><p class="text-3xl font-black text-[#00E0D0]">${fmt(d.total_recaudado)}</p></div>
             <div class="grid grid-cols-2 gap-4">
-                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[9px] font-bold">Efectivo</p><p class="font-black">${fmt(d.efectivo)}</p></div>
-                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[9px] font-bold">Tarjeta</p><p class="font-black">${fmt(d.tarjeta)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[9px] font-bold uppercase text-gray-400">Efectivo</p><p class="font-black">${fmt(d.efectivo)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[9px] font-bold uppercase text-gray-400">Tarjeta</p><p class="font-black">${fmt(d.tarjeta)}</p></div>
+            </div>
+            <div class="glass p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-[10px] text-gray-400 font-black uppercase">Autos</span>
+                    <span class="text-2xl font-black text-white">${autos.toLocaleString('es-CL')}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="border-l-4 border-[#FFD700] pl-2"><p class="text-[9px] text-gray-400 font-bold uppercase">Pase diario</p><p class="font-black text-white">${pases.toLocaleString('es-CL')} <span class="text-[10px] text-gray-500">${pct(pases)}%</span></p></div>
+                    <div class="border-l-4 border-[#00E0D0] pl-2"><p class="text-[9px] text-gray-400 font-bold uppercase">Por minuto</p><p class="font-black text-white">${minutos.toLocaleString('es-CL')} <span class="text-[10px] text-gray-500">${pct(minutos)}%</span></p></div>
+                </div>
+            </div>
+            <div class="glass p-3 flex justify-between items-center">
+                <span class="text-[9px] text-gray-400 font-bold uppercase">Ticket promedio</span>
+                <span class="font-black text-white">${autos ? fmt(ticket) : '—'}</span>
             </div>
         `;
         document.getElementById('modal-detalle').classList.remove('hidden');
