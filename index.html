@@ -147,6 +147,11 @@
         <div id="pred-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
     </div>
 
+    <div class="card border-t-4 border-[#FFD700]">
+        <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🎉 Feriados · Findes Largos</h2>
+        <div id="feriados-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </div>
+
     <div class="card">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">Comparador</h2>
         <div class="flex gap-1 mb-4 bg-[#0A2F4F] p-1 rounded-xl">
@@ -385,7 +390,7 @@
 
             renderLine(histD);
             renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
-            try { renderComparador(); renderPredictivo(); renderTendencias(); renderEvasion(); } catch (e) { console.error('analytics:', e); }
+            try { renderComparador(); renderPredictivo(); renderFeriados(); renderTendencias(); renderEvasion(); } catch (e) { console.error('analytics:', e); }
         });
     }
 
@@ -695,6 +700,145 @@
                 <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
             </div>
         `;
+    }
+
+    // ---------- FERIADOS CHILE / FINDES LARGOS ----------
+    // Feriados calculados por ley: fijos + Semana Santa (computus de Meeus)
+    // + ley de lunes (19.668) + evangelicas (20.299) + puentes de Fiestas
+    // Patrias (20.215) y Año Nuevo (20.983). Funciona para cualquier año.
+    // NO incluye feriados extraordinarios (elecciones, censos) ni regionales.
+    function feriadosDelAnio(y) {
+        const D = (m, d) => new Date(y, m - 1, d);
+        // Domingo de Pascua
+        const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+        const d1 = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+        const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d1 - g + 15) % 30;
+        const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+        const m = Math.floor((a + 11 * h + 22 * l) / 451);
+        const pascua = new Date(y, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+        const viernesSanto = new Date(pascua); viernesSanto.setDate(pascua.getDate() - 2);
+        const sabadoSanto = new Date(pascua); sabadoSanto.setDate(pascua.getDate() - 1);
+        // Ley de lunes: mar/mie/jue -> lunes anterior; vie -> lunes siguiente
+        const leyLunes = (dt) => {
+            const wd = dt.getDay(), r = new Date(dt);
+            if (wd >= 2 && wd <= 4) r.setDate(r.getDate() - (wd - 1));
+            else if (wd === 5) r.setDate(r.getDate() + 3);
+            return r;
+        };
+        // Evangelicas: si 31 oct cae martes -> viernes anterior; miercoles -> viernes siguiente
+        const evang = D(10, 31);
+        if (evang.getDay() === 2) evang.setDate(evang.getDate() - 4);
+        else if (evang.getDay() === 3) evang.setDate(evang.getDate() + 2);
+        // Pueblos indigenas = solsticio de invierno (fecha por decreto)
+        const solsticio = { 2024: 20, 2025: 20, 2026: 21, 2027: 21, 2028: 20, 2029: 20, 2030: 21 }[y] || 21;
+        const lista = [
+            [D(1, 1), 'Año Nuevo'],
+            [viernesSanto, 'Viernes Santo'],
+            [sabadoSanto, 'Sábado Santo'],
+            [D(5, 1), 'Día del Trabajo'],
+            [D(5, 21), 'Glorias Navales'],
+            [D(6, solsticio), 'Pueblos Indígenas'],
+            [leyLunes(D(6, 29)), 'San Pedro y San Pablo'],
+            [D(7, 16), 'Virgen del Carmen'],
+            [D(8, 15), 'Asunción de la Virgen'],
+            [D(9, 18), 'Independencia'],
+            [D(9, 19), 'Glorias del Ejército'],
+            [leyLunes(D(10, 12)), 'Encuentro de Dos Mundos'],
+            [evang, 'Iglesias Evangélicas'],
+            [D(11, 1), 'Todos los Santos'],
+            [D(12, 8), 'Inmaculada Concepción'],
+            [D(12, 25), 'Navidad'],
+        ];
+        const wd18 = D(9, 18).getDay();
+        if (wd18 === 2) lista.push([D(9, 17), 'Fiestas Patrias (puente)']);
+        if (wd18 === 3) lista.push([D(9, 20), 'Fiestas Patrias (puente)']);
+        if (D(1, 1).getDay() === 0) lista.push([D(1, 2), 'Puente Año Nuevo']);
+        return lista.map(([date, nombre]) => { date.setHours(0, 0, 0, 0); return { date, nombre }; })
+            .sort((x, z) => x.date - z.date);
+    }
+
+    function renderFeriados() {
+        const cont = document.getElementById('feriados-contenido');
+        if (!cont) return;
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const anio = hoy.getFullYear();
+        const keyD = (dt) => dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate();
+        const fers = [...feriadosDelAnio(anio), ...feriadosDelAnio(anio + 1)];
+        const ferMap = new Map(fers.map(f => [keyD(f.date), f]));
+        const esLibre = (dt) => dt.getDay() === 0 || dt.getDay() === 6 || ferMap.has(keyD(dt));
+
+        // Bloques de dias libres consecutivos (finde + feriados pegados).
+        // Parte 3 dias atras por si hay un finde largo EN CURSO.
+        const bloques = [];
+        const cursor = new Date(hoy); cursor.setDate(cursor.getDate() - 3);
+        const horizonte = new Date(anio + 1, 11, 31);
+        let run = null;
+        while (cursor <= horizonte) {
+            if (esLibre(cursor)) {
+                if (!run) run = { ini: new Date(cursor), dias: 0, nombres: [] };
+                run.dias++;
+                const fx = ferMap.get(keyD(cursor));
+                if (fx) run.nombres.push(fx.nombre);
+                run.hasta = new Date(cursor);
+            } else if (run) { bloques.push(run); run = null; }
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        if (run) bloques.push(run);
+        // Finde largo = 3+ dias libres seguidos con al menos un feriado
+        const largos = bloques.filter(b => b.dias >= 3 && b.nombres.length && b.hasta >= hoy);
+
+        const DSEM = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const MC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        const fCorta = (dt) => `${DSEM[dt.getDay()]} ${dt.getDate()} ${MC[dt.getMonth()]}`;
+
+        const prox = largos[0];
+        let destacado = '';
+        if (prox) {
+            const enCurso = prox.ini <= hoy;
+            const enDias = Math.round((prox.ini - hoy) / 86400000);
+            destacado = `<div class="bg-white/5 rounded-xl p-3 mb-4 border-l-4 border-[#FFD700]">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">⭐ Próximo finde largo ${enCurso ? '· ¡en curso!' : `· en ${enDias} días`}</p>
+                <p class="text-xl font-black text-[#FFD700] mt-1">${prox.dias} días <span class="text-sm text-white font-bold">· ${fCorta(prox.ini)} → ${fCorta(prox.hasta)}</span></p>
+                <p class="text-[10px] text-gray-400 mt-1">${prox.nombres.join(' + ')}</p>
+            </div>`;
+        }
+
+        // Feriados restantes del año (si quedan pocos, asoma el proximo año)
+        let lista = fers.filter(fx => fx.date >= hoy && fx.date.getFullYear() === anio);
+        if (lista.length < 3) lista = fers.filter(fx => fx.date >= hoy).slice(0, 6);
+        const enLargo = (fx) => largos.some(b => fx.date >= b.ini && fx.date <= b.hasta);
+
+        // Lo que se recaudo ese MISMO feriado el año pasado (match por nombre,
+        // asi la ley de lunes no desalinea las fechas). Click -> detalle.
+        const prevPorNombre = new Map(feriadosDelAnio(anio - 1).map(fx => [fx.nombre, fx.date]));
+        const idxPorFecha = new Map(todosLosCierres.map((c, ix) => [keyD(c.date), ix]));
+
+        const filas = lista.map(fx => {
+            const dPrev = prevPorNombre.get(fx.nombre);
+            const idx = dPrev !== undefined ? idxPorFecha.get(keyD(dPrev)) : undefined;
+            const prev = idx !== undefined
+                ? `<span class="text-[9px] text-[#00C853] font-black cursor-pointer" onclick="abrirModal(${idx})">${anio - 1}: ${fmt(todosLosCierres[idx].total)}</span>`
+                : `<span class="text-[9px] text-gray-600">${anio - 1}: s/d</span>`;
+            return `<div class="flex items-center justify-between py-2 border-b border-white/5">
+                <div>
+                    <p class="text-xs font-bold text-white">${fCorta(fx.date)}${fx.date.getFullYear() !== anio ? ` <span class="text-gray-500">'${String(fx.date.getFullYear()).slice(2)}</span>` : ''}</p>
+                    <p class="text-[9px] text-gray-400">${fx.nombre}</p>
+                </div>
+                <div class="text-right">
+                    ${enLargo(fx) ? '<span class="text-[8px] bg-[#FFD700]/15 text-[#FFD700] font-black uppercase px-2 py-0.5 rounded-full">finde largo</span><br>' : ''}
+                    ${prev}
+                </div>
+            </div>`;
+        }).join('');
+
+        const quedanLargos = largos.filter(b => b.ini.getFullYear() === anio).length;
+        cont.innerHTML = destacado + `
+            <div class="flex justify-between items-center mb-2">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Feriados que vienen</p>
+                <p class="text-[9px] text-gray-500">${quedanLargos} findes largos más en ${anio}</p>
+            </div>
+            ${filas || "<p class='text-gray-500 italic text-center text-xs'>Sin feriados próximos.</p>"}
+            <p class="text-[9px] text-gray-600 italic mt-3">Calculados por ley (incl. ley de lunes) · no incluye feriados extraordinarios (ej. elecciones)</p>`;
     }
 
     // ---------- TENDENCIAS / RANKINGS ----------
