@@ -142,6 +142,11 @@
         </div>
     </div>
 
+    <div class="card border-t-4 border-[#FFB300]">
+        <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛒 Kiosco Makito</h2>
+        <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </div>
+
     <div class="card border-t-4 border-[#00E0D0]">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🔮 Proyección</h2>
         <div id="pred-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
@@ -236,6 +241,10 @@
     let compModo = 'mes';       // modo activo del comparador: dia | mes | anio
     let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
     let cierreHoy = null;   // cierre de HOY si la jornada ya cerro (para no mostrar 0)
+    // ---- Kiosco Makito: sub-mapa 'makito' que sube la caja (admin_stats + historico_cierres) ----
+    let makitoHoy = { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+    let makitoCierreHoy = null;   // makito del cierre de HOY (para no mostrar 0 tras cerrar)
+    let makitoAcum = { M: { total:0, ganancia:0, ef:0, tj:0, und:0 }, A: { total:0, ganancia:0, ef:0, tj:0, und:0 } };
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
     const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
@@ -335,14 +344,17 @@
             if (ds.exists()) {
                 const d = ds.data();
                 dataHoy = { total: num(d.total_hoy), autos: num(d.total_autos), ef: num(d.efectivo), tj: num(d.tarjeta), pases: num(d.cant_pases), minutos: num(d.cant_minutos) };
+                makitoHoy = Object.assign({ total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 }, d.makito || {});
                 document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
                 try { renderHoraPunta(d.por_hora); } catch (e) { console.error('horapunta:', e); }
             } else {
                 dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
+                makitoHoy = { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
                 document.getElementById('fecha-actual').innerText = fechaDoc;
             }
             actualizarHoy();
             pintarAcumulados();
+            try { renderMakito(); } catch (e) { console.error('makito:', e); }
         });
 
         const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"));
@@ -350,9 +362,11 @@
             let html = "", acumM = 0, acumA = 0, autM = 0, autA = 0, efM = 0, tjM = 0;
             let histD = {}, histM = new Array(12).fill(0);
             let histMPrev = new Array(12).fill(0), prevMeses = new Set();
+            let mkM = { total:0, ganancia:0, ef:0, tj:0, und:0 }, mkA = { total:0, ganancia:0, ef:0, tj:0, und:0 };
             cierresData = [];
             todosLosCierres = [];
             cierreHoy = null;
+            makitoCierreHoy = null;
 
             snap.forEach(docSnap => {
                 const d = docSnap.data();
@@ -361,16 +375,20 @@
                 const pasesDia = num(d.cant_pases), minutosDia = num(d.cant_minutos);
                 const autosDia = pasesDia + minutosDia;
                 todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia, evadidos: num(d.cant_evadidos), montoEvadido: num(d.monto_evadido_estimado) });
+                const mk = d.makito || { total: num(d.total_makito), ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
                 if (f.getFullYear() === hoy.getFullYear() && f.getMonth() === hoy.getMonth() && f.getDate() === hoy.getDate()) {
                     cierreHoy = { total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia };
+                    makitoCierreHoy = { total: num(mk.total), ganancia: num(mk.ganancia), efectivo: num(mk.efectivo), tarjeta: num(mk.tarjeta), unidades: num(mk.unidades) };
                 }
                 if (f.getFullYear() === anioActual) {
                     acumA += totalDia; autA += autosDia;
                     histM[f.getMonth()] += totalDia;
+                    mkA.total += num(mk.total); mkA.ganancia += num(mk.ganancia); mkA.ef += num(mk.efectivo); mkA.tj += num(mk.tarjeta); mkA.und += num(mk.unidades);
                     if (f.getMonth() === hoy.getMonth()) {
                         acumM += totalDia; autM += autosDia;
                         efM += num(d.efectivo); tjM += num(d.tarjeta);
                         histD[f.getDate()] = totalDia;
+                        mkM.total += num(mk.total); mkM.ganancia += num(mk.ganancia); mkM.ef += num(mk.efectivo); mkM.tj += num(mk.tarjeta); mkM.und += num(mk.unidades);
                     }
                 } else if (f.getFullYear() === anioActual - 1) {
                     histMPrev[f.getMonth()] += totalDia;
@@ -384,13 +402,14 @@
             });
 
             acum = { M: acumM, A: acumA, autM, autA, efM, tjM };
+            makitoAcum = { M: mkM, A: mkA };
             pintarAcumulados();
             actualizarHoy();  // por si el cierre de hoy acaba de aparecer
             document.getElementById('lista-cierres').innerHTML = html || "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
 
             renderLine(histD);
             renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
-            try { renderComparador(); renderPredictivo(); renderFeriados(); renderTendencias(); renderEvasion(); } catch (e) { console.error('analytics:', e); }
+            try { renderComparador(); renderPredictivo(); renderFeriados(); renderTendencias(); renderEvasion(); renderMakito(); } catch (e) { console.error('analytics:', e); }
         });
     }
 
@@ -979,6 +998,50 @@
                 <div class="glass p-3 border-l-4 border-[#FFD700]"><p class="text-[8px] text-gray-400 uppercase font-black">Evadidos año</p><p class="text-lg font-black text-white">${A.ev.toLocaleString('es-CL')}</p><p class="text-[10px] text-gray-500">≈ ${fmt(A.monto)} perdidos</p></div>
             </div>
             ${peoresHtml}
+        `;
+    }
+
+    // ---------- KIOSCO MAKITO ----------
+    // Lee el sub-mapa 'makito' que sube SOLO la caja (Python): admin_stats -> hoy en vivo;
+    // historico_cierres -> mes/año. La BI solo lo muestra (nunca escribe plata).
+    function renderMakito() {
+        const cont = document.getElementById('makito-contenido');
+        if (!cont) return;
+        // "Hoy": si la jornada está abierta usa lo vivo; si cerró, el makito del cierre de hoy.
+        const live = (makitoHoy && num(makitoHoy.total) > 0) ? makitoHoy : (makitoCierreHoy || {});
+        const hoyT = num(live.total), hoyG = num(live.ganancia), hoyU = num(live.unidades);
+        // Mes/año = histórico + lo de hoy en vivo (consistente con las tarjetas del parking).
+        const M = makitoAcum.M, A = makitoAcum.A;
+        const mesT = num(M.total) + num(makitoHoy.total), mesG = num(M.ganancia) + num(makitoHoy.ganancia);
+        const mesEf = num(M.ef) + num(makitoHoy.efectivo), mesTj = num(M.tj) + num(makitoHoy.tarjeta);
+        const anioT = num(A.total) + num(makitoHoy.total), anioU = num(A.und) + num(makitoHoy.unidades);
+        const margen = mesT > 0 ? (mesG / mesT * 100) : 0;
+        const parkingMes = num(acum.M) + num(dataHoy.total);
+        const aporte = (mesT + parkingMes) > 0 ? (mesT / (mesT + parkingMes) * 100) : 0;
+
+        if (hoyT === 0 && mesT === 0 && anioT === 0) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>El kiosco aún no registra ventas. Aparecerán aquí cuando la caja (Python) las sincronice.</p>";
+            return;
+        }
+        cont.innerHTML = `
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Venta Makito · hoy</p>
+                <p class="text-3xl font-black text-[#FFB300]">${fmt(hoyT)}</p>
+                <p class="text-xs text-gray-400 mt-1">Ganancia <b class="text-[#00C853]">${fmt(hoyG)}</b> · ${hoyU.toLocaleString('es-CL')} u.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Venta mes</p><p class="text-lg font-black text-white">${fmt(mesT)}</p><p class="text-[10px] text-gray-500">margen ${margen.toFixed(0)}%</p></div>
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Ganancia mes</p><p class="text-lg font-black text-[#00C853]">${fmt(mesG)}</p><p class="text-[10px] text-gray-500">${anioU.toLocaleString('es-CL')} u. en el año</p></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[8px] text-gray-400 uppercase font-black">Efectivo mes</p><p class="font-black text-white">${fmt(mesEf)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 uppercase font-black">Tarjeta mes</p><p class="font-black text-white">${fmt(mesTj)}</p></div>
+            </div>
+            <div class="flex justify-between items-center mt-4 pt-3 border-t border-white/10">
+                <span class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Venta año · ${anioActual}</span>
+                <span class="text-lg font-black text-[#FFD700]">${fmt(anioT)}</span>
+            </div>
+            <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total recaudado del mes (parking + kiosco).</p>
         `;
     }
 
