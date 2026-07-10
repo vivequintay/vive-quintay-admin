@@ -55,6 +55,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ---------- Gestión de catálogo Makito (admin, desde el teléfono) ----------
+    // El catálogo lo ESPEJA solo la caja (Python/Admin SDK). El teléfono admin lo LEE
+    // (para escanear/listar) y deja ÓRDENES de cambio en 'makito_cambios' (guardar/reponer).
+    // La caja las aplica y las marca (Admin SDK, ignora estas reglas); el cliente NO puede
+    // editar el catálogo ni modificar/borrar las órdenes ya enviadas.
+    match /makito_catalogo/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /makito_cambios/{doc} {
+      allow read, create: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // ---------- Todo lo demas: cerrado ----------
     // (Firestore ya niega por defecto lo no declarado; esto lo deja explicito.)
     match /{document=**} {

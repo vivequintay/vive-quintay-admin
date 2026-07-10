@@ -147,6 +147,12 @@
         <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
     </div>
 
+    <div class="card border-t-4 border-[#FFB300]">
+        <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
+        <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
+        <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
+    </div>
+
     <div class="card border-t-4 border-[#00E0D0]">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🔮 Proyección</h2>
         <div id="pred-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
@@ -213,6 +219,34 @@
         </div>
     </div>
 
+    <div id="gestor-makito" class="fixed inset-0 z-[160] bg-[#0A2F4F] hidden flex flex-col p-4 overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-xl font-black text-[#FFB300]">🛠 Gestión de Kiosco</h3>
+            <button onclick="gmClose()" class="text-gray-400 text-3xl leading-none">&times;</button>
+        </div>
+        <div class="bg-black rounded-2xl overflow-hidden mb-3 relative" style="aspect-ratio:4/3;">
+            <video id="gm-video" playsinline muted class="w-full h-full object-cover"></video>
+            <div class="absolute left-6 right-6 top-1/2 h-0.5 bg-[#FFB300]/70"></div>
+        </div>
+        <p id="gm-scan-msg" class="text-center text-xs text-gray-400 mb-3">Toca "Escanear" para abrir la cámara, o ingresa el código a mano.</p>
+        <div class="flex gap-2 mb-4">
+            <button onclick="gmStart()" class="flex-1 p-3 bg-[#FFB300] text-[#0A2F4F] font-black rounded-xl">📷 Escanear</button>
+            <button onclick="gmStop()" class="px-5 bg-[#1B263B] text-white font-bold rounded-xl">Detener</button>
+        </div>
+        <div class="glass p-3 mb-4">
+            <label class="text-[9px] text-gray-400 uppercase font-black">Código de barras</label>
+            <div class="flex gap-2 mt-1">
+                <input id="gm-cod" inputmode="numeric" class="comp-select flex-1" placeholder="escanéalo o ingrésalo a mano">
+                <button onclick="gmBuscar()" class="px-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Buscar</button>
+            </div>
+        </div>
+        <div id="gm-panel" class="mb-5"></div>
+        <div>
+            <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-2">Últimos cambios</p>
+            <div id="gm-pendientes" class="space-y-2"><p class="text-gray-500 italic text-xs">Sin cambios recientes.</p></div>
+        </div>
+    </div>
+
 <script>
     // Service worker RED PRIMERO (sw.js): da soporte offline y ademas
     // reemplaza cualquier SW antiguo "cache primero" que haya quedado
@@ -223,7 +257,7 @@
 </script>
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, onSnapshot, collection, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, onSnapshot, collection, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
@@ -245,6 +279,8 @@
     let makitoHoy = { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
     let makitoCierreHoy = null;   // makito del cierre de HOY (para no mostrar 0 tras cerrar)
     let makitoAcum = { M: { total:0, ganancia:0, ef:0, tj:0, und:0 }, A: { total:0, ganancia:0, ef:0, tj:0, und:0 } };
+    let makitoCatalogo = [];   // espejo del catálogo que sube la caja (para escanear/listar)
+    let makitoCambios = [];    // cola de órdenes del teléfono (pendiente/aplicado)
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
     const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
@@ -410,6 +446,16 @@
             renderLine(histD);
             renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
             try { renderComparador(); renderPredictivo(); renderFeriados(); renderTendencias(); renderEvasion(); renderMakito(); } catch (e) { console.error('analytics:', e); }
+        });
+
+        // Catálogo Makito (espejo que sube la caja) + cola de cambios del teléfono
+        onSnapshot(doc(db, "makito_catalogo", "catalogo"), (ds) => {
+            makitoCatalogo = ds.exists() ? (ds.data().productos || []) : [];
+        });
+        onSnapshot(collection(db, "makito_cambios"), (snap) => {
+            makitoCambios = snap.docs.map(d => d.data());
+            makitoCambios.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+            try { gmRenderPendientes(); } catch (e) {}
         });
     }
 
@@ -1043,6 +1089,130 @@
             </div>
             <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total recaudado del mes (parking + kiosco).</p>
         `;
+    }
+
+    // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
+    let gmStream = null, gmScanning = false;
+    const gmBDSupported = ('BarcodeDetector' in window);
+    const gmEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    function gmFlash(msg) { const m = document.getElementById('gm-scan-msg'); if (m) m.textContent = msg; }
+
+    window.gmOpen = () => {
+        document.getElementById('gestor-makito').classList.remove('hidden');
+        document.getElementById('gm-panel').innerHTML = '';
+        document.getElementById('gm-cod').value = '';
+        gmFlash('Toca "Escanear" para abrir la cámara, o ingresa el código a mano.');
+        gmRenderPendientes();
+    };
+    window.gmClose = () => { gmStop(); document.getElementById('gestor-makito').classList.add('hidden'); };
+    window.gmStop = () => {
+        gmScanning = false;
+        if (gmStream) { gmStream.getTracks().forEach(t => t.stop()); gmStream = null; }
+    };
+    window.gmStart = async () => {
+        const video = document.getElementById('gm-video');
+        if (!gmBDSupported) { gmFlash('Tu navegador no trae escáner. Ingresa el código a mano abajo.'); return; }
+        try {
+            gmStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = gmStream; await video.play();
+            const detector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'codabar', 'itf'] });
+            gmScanning = true; gmFlash('Apunta al código de barras…');
+            const tick = async () => {
+                if (!gmScanning) return;
+                try {
+                    const codes = await detector.detect(video);
+                    if (codes && codes.length) { const c = codes[0].rawValue; gmStop(); document.getElementById('gm-cod').value = c; gmRenderPanel(c); gmFlash('Código leído: ' + c); return; }
+                } catch (e) {}
+                requestAnimationFrame(tick);
+            };
+            requestAnimationFrame(tick);
+        } catch (e) { gmFlash('No pude abrir la cámara. Revisa el permiso o ingresa el código a mano.'); }
+    };
+    window.gmBuscar = () => { const c = document.getElementById('gm-cod').value.trim(); if (c) gmRenderPanel(c); };
+
+    function gmRenderPanel(cod) {
+        const panel = document.getElementById('gm-panel');
+        if (!panel) return;
+        if (!cod) { panel.innerHTML = ''; return; }
+        const p = makitoCatalogo.find(x => String(x.codigo_barra || '') === String(cod));
+        if (p) {
+            panel.innerHTML = `
+                <div class="glass p-4 border-l-4 border-[#00C853]">
+                    <p class="text-[9px] text-gray-400 uppercase font-black">Producto encontrado</p>
+                    <p class="text-lg font-black text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</p>
+                    <p class="text-xs text-gray-400 mb-3">Precio ${fmt(p.precio)} · stock actual <b class="text-white">${num(p.stock)}</b></p>
+                    <div class="flex items-center gap-2">
+                        <input id="gm-delta" type="number" value="10" class="comp-select w-24 text-center">
+                        <button onclick="gmReponer('${gmEsc(cod)}')" class="flex-1 p-3 bg-[#00C853] text-[#0A2F4F] font-black rounded-lg">➕ Reponer stock</button>
+                    </div>
+                    <details class="mt-3">
+                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar datos</summary>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <input id="gm-nombre" value="${gmEsc(p.nombre)}" placeholder="Nombre" class="comp-select col-span-2">
+                            <input id="gm-precio" type="number" value="${num(p.precio)}" placeholder="Precio" class="comp-select">
+                            <input id="gm-costo" type="number" value="${num(p.costo)}" placeholder="Costo" class="comp-select">
+                        </div>
+                        <button onclick="gmGuardar('${gmEsc(cod)}')" class="w-full mt-2 p-2 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar datos</button>
+                    </details>
+                </div>`;
+        } else {
+            panel.innerHTML = `
+                <div class="glass p-4 border-l-4 border-[#FFB300]">
+                    <p class="text-[9px] text-gray-400 uppercase font-black">Producto nuevo · ${gmEsc(cod)}</p>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input id="gm-nombre" placeholder="Nombre" class="comp-select col-span-2">
+                        <input id="gm-precio" type="number" placeholder="Precio" class="comp-select">
+                        <input id="gm-costo" type="number" placeholder="Costo" class="comp-select">
+                        <input id="gm-stock" type="number" value="0" placeholder="Stock inicial" class="comp-select col-span-2">
+                    </div>
+                    <button onclick="gmCrear('${gmEsc(cod)}')" class="w-full mt-2 p-3 bg-[#FFB300] text-[#0A2F4F] font-black rounded-lg">Crear producto</button>
+                </div>`;
+        }
+    }
+
+    window.gmReponer = (cod) => {
+        const delta = parseInt(document.getElementById('gm-delta').value || '0', 10);
+        if (!delta) { gmFlash('Ingresa una cantidad a reponer.'); return; }
+        gmEnviar({ tipo: 'reponer', codigo_barra: cod, delta });
+    };
+    window.gmGuardar = (cod) => {
+        gmEnviar({ tipo: 'guardar', codigo_barra: cod,
+            nombre: (document.getElementById('gm-nombre').value || '').trim(),
+            precio: parseInt(document.getElementById('gm-precio').value || '0', 10),
+            costo: parseInt(document.getElementById('gm-costo').value || '0', 10) });
+    };
+    window.gmCrear = (cod) => {
+        const nombre = (document.getElementById('gm-nombre').value || '').trim();
+        if (!nombre) { gmFlash('Ponle un nombre al producto.'); return; }
+        gmEnviar({ tipo: 'guardar', codigo_barra: cod, nombre,
+            precio: parseInt(document.getElementById('gm-precio').value || '0', 10),
+            costo: parseInt(document.getElementById('gm-costo').value || '0', 10),
+            stock_inicial: parseInt(document.getElementById('gm-stock').value || '0', 10) });
+    };
+
+    async function gmEnviar(obj) {
+        try {
+            await addDoc(collection(db, 'makito_cambios'), Object.assign(
+                { aplicado: false, origen: 'admin_pwa', ts: new Date().toISOString() }, obj));
+            gmFlash('✓ Enviado. La caja lo aplicará al sincronizar.');
+            document.getElementById('gm-panel').innerHTML = '';
+            document.getElementById('gm-cod').value = '';
+        } catch (e) { gmFlash('Error al enviar: ' + (e && e.message ? e.message : e)); }
+    }
+
+    function gmRenderPendientes() {
+        const cont = document.getElementById('gm-pendientes');
+        if (!cont) return;
+        if (!makitoCambios.length) { cont.innerHTML = "<p class='text-gray-500 italic text-xs'>Sin cambios recientes.</p>"; return; }
+        cont.innerHTML = makitoCambios.slice(0, 8).map(c => {
+            const est = c.aplicado
+                ? (c.ok === false ? `<span class="text-[#F87171] text-[10px] font-black">✕ ${gmEsc(c.resultado || 'error')}</span>` : '<span class="text-[#00C853] text-[10px] font-black">✓ aplicado</span>')
+                : '<span class="text-[#FFD700] text-[10px] font-black">⏳ pendiente</span>';
+            const desc = c.tipo === 'reponer'
+                ? `Reponer ${gmEsc(c.codigo_barra)} (+${num(c.delta)})`
+                : `Guardar ${gmEsc(c.nombre || c.codigo_barra)}`;
+            return `<div class="flex justify-between items-center glass p-2 text-xs"><span class="text-gray-300">${desc}</span>${est}</div>`;
+        }).join('');
     }
 
     window.abrirModal = (idx) => {
