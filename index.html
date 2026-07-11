@@ -241,6 +241,14 @@
             </div>
         </div>
         <div id="gm-panel" class="mb-5"></div>
+        <div class="mb-5">
+            <div class="flex justify-between items-center mb-2">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Productos actuales</p>
+                <span id="gm-cat-count" class="text-[9px] text-gray-500"></span>
+            </div>
+            <input id="gm-cat-filtro" oninput="gmRenderCatalogo()" class="comp-select w-full mb-2" placeholder="Filtrar por nombre o código…">
+            <div id="gm-catalogo" class="space-y-2"><p class="text-gray-500 italic text-xs">Cargando catálogo…</p></div>
+        </div>
         <div>
             <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-2">Últimos cambios</p>
             <div id="gm-pendientes" class="space-y-2"><p class="text-gray-500 italic text-xs">Sin cambios recientes.</p></div>
@@ -451,12 +459,13 @@
         // Catálogo Makito (espejo que sube la caja) + cola de cambios del teléfono
         onSnapshot(doc(db, "makito_catalogo", "catalogo"), (ds) => {
             makitoCatalogo = ds.exists() ? (ds.data().productos || []) : [];
-        });
+            try { gmRenderCatalogo(); } catch (e) {}
+        }, (err) => console.error('makito_catalogo (¿reglas publicadas?):', err));
         onSnapshot(collection(db, "makito_cambios"), (snap) => {
             makitoCambios = snap.docs.map(d => d.data());
             makitoCambios.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
             try { gmRenderPendientes(); } catch (e) {}
-        });
+        }, (err) => console.error('makito_cambios (¿reglas publicadas?):', err));
     }
 
     // Grafico de hora punta (ingresos por hora). Se activa solo cuando la caja
@@ -1102,6 +1111,7 @@
         document.getElementById('gm-panel').innerHTML = '';
         document.getElementById('gm-cod').value = '';
         gmFlash('Toca "Escanear" para abrir la cámara, o ingresa el código a mano.');
+        gmRenderCatalogo();
         gmRenderPendientes();
     };
     window.gmClose = () => { gmStop(); document.getElementById('gestor-makito').classList.add('hidden'); };
@@ -1214,6 +1224,37 @@
             return `<div class="flex justify-between items-center glass p-2 text-xs"><span class="text-gray-300">${desc}</span>${est}</div>`;
         }).join('');
     }
+
+    function gmRenderCatalogo() {
+        const cont = document.getElementById('gm-catalogo');
+        const count = document.getElementById('gm-cat-count');
+        if (!cont) return;
+        if (count) count.textContent = makitoCatalogo.length ? (makitoCatalogo.length + ' en catálogo') : '';
+        if (!makitoCatalogo.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-xs'>El catálogo aún no llega desde la caja. Requiere la caja con v14.5 sincronizando y las reglas de Firestore publicadas.</p>";
+            return;
+        }
+        const fEl = document.getElementById('gm-cat-filtro');
+        const q = (fEl ? fEl.value : '').trim().toLowerCase();
+        const lista = makitoCatalogo.filter(p => !q
+            || String(p.nombre || '').toLowerCase().includes(q)
+            || String(p.codigo_barra || '').toLowerCase().includes(q));
+        if (!lista.length) { cont.innerHTML = "<p class='text-gray-500 italic text-xs'>Sin coincidencias.</p>"; return; }
+        cont.innerHTML = lista.map(p => {
+            const bajo = num(p.stock) <= 5;
+            return `<div onclick="gmTocarProducto('${gmEsc(p.codigo_barra)}')" class="flex justify-between items-center glass p-3 active:scale-95 transition-all cursor-pointer">
+                <div><span class="text-sm font-bold text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</span><br><span class="text-[9px] text-gray-500">${gmEsc(p.codigo_barra) || 'sin código'} · ${fmt(p.precio)}</span></div>
+                <span class="text-sm font-black ${bajo ? 'text-[#F87171]' : 'text-[#00C853]'}">${num(p.stock)} u.</span>
+            </div>`;
+        }).join('');
+    }
+    window.gmTocarProducto = (cod) => {
+        if (!cod) { gmFlash('Ese producto no tiene código de barra. Edítalo desde la caja.'); return; }
+        document.getElementById('gm-cod').value = cod;
+        gmRenderPanel(cod);
+        gmFlash('Producto seleccionado.');
+        try { document.getElementById('gm-panel').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    };
 
     window.abrirModal = (idx) => {
         const d = cierresData[idx];
