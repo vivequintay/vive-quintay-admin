@@ -1146,21 +1146,37 @@
         if (!cod) { panel.innerHTML = ''; return; }
         const p = makitoCatalogo.find(x => String(x.codigo_barra || '') === String(cod));
         if (p) {
+            const precio = num(p.precio), costo = num(p.costo), stock = num(p.stock);
+            const margen = precio - costo, margenPct = precio > 0 ? Math.round(margen / precio * 100) : 0;
+            const v30 = num(p.vendidos_30), ritmo = v30 / 30;
+            const dias = ritmo > 0 ? Math.round(stock / ritmo) : null;
+            let rec, recCol;
+            if (margen < 0) { rec = '⚠ Margen NEGATIVO — vendes bajo el costo'; recCol = '#F87171'; }
+            else if (v30 === 0) { rec = 'Sin ventas en 30 días · evalúa antes de reponer'; recCol = '#9CA3AF'; }
+            else if (dias !== null && dias <= 7) { rec = `Conviene reponer · te queda ~${dias} día(s) de stock`; recCol = '#00C853'; }
+            else if (dias !== null && dias <= 21) { rec = `Rota bien · stock para ~${dias} días`; recCol = '#FFD700'; }
+            else { rec = `Stock holgado${dias !== null ? ` (~${dias} días)` : ''}`; recCol = '#00E0D0'; }
             panel.innerHTML = `
-                <div class="glass p-4 border-l-4 border-[#00C853]">
+                <div class="glass p-4 border-l-4" style="border-color:${recCol}">
                     <p class="text-[9px] text-gray-400 uppercase font-black">Producto encontrado</p>
                     <p class="text-lg font-black text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</p>
-                    <p class="text-xs text-gray-400 mb-3">Precio ${fmt(p.precio)} · stock actual <b class="text-white">${num(p.stock)}</b></p>
+                    <div class="grid grid-cols-3 gap-2 my-3 text-center">
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black ${stock <= 5 ? 'text-[#F87171]' : 'text-white'}">${stock}</p><p class="text-[8px] text-gray-400 uppercase font-black">stock</p></div>
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black text-white">${v30}</p><p class="text-[8px] text-gray-400 uppercase font-black">vend. 30d</p></div>
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black ${margen < 0 ? 'text-[#F87171]' : 'text-[#00C853]'}">${margenPct}%</p><p class="text-[8px] text-gray-400 uppercase font-black">margen</p></div>
+                    </div>
+                    <div class="rounded-lg px-3 py-2 mb-2 text-xs font-black text-center" style="background:${recCol}22;color:${recCol}">${rec}</div>
+                    <p class="text-[10px] text-gray-400 mb-3">Ganancia 30d <b class="text-[#00C853]">${fmt(p.ganancia_30)}</b> · precio ${fmt(precio)} / costo ${fmt(costo)}${p.ultima_venta ? ` · últ. venta ${gmEsc(p.ultima_venta)}` : ''}</p>
                     <div class="flex items-center gap-2">
                         <input id="gm-delta" type="number" value="10" class="comp-select w-24 text-center">
                         <button onclick="gmReponer('${gmEsc(cod)}')" class="flex-1 p-3 bg-[#00C853] text-[#0A2F4F] font-black rounded-lg">➕ Reponer stock</button>
                     </div>
                     <details class="mt-3">
-                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar datos</summary>
+                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar datos (nuevo costo del proveedor, precio, nombre)</summary>
                         <div class="grid grid-cols-2 gap-2 mt-2">
                             <input id="gm-nombre" value="${gmEsc(p.nombre)}" placeholder="Nombre" class="comp-select col-span-2">
-                            <input id="gm-precio" type="number" value="${num(p.precio)}" placeholder="Precio" class="comp-select">
-                            <input id="gm-costo" type="number" value="${num(p.costo)}" placeholder="Costo" class="comp-select">
+                            <input id="gm-precio" type="number" value="${precio}" placeholder="Precio" class="comp-select">
+                            <input id="gm-costo" type="number" value="${costo}" placeholder="Costo" class="comp-select">
                         </div>
                         <button onclick="gmGuardar('${gmEsc(cod)}')" class="w-full mt-2 p-2 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar datos</button>
                     </details>
