@@ -1171,14 +1171,22 @@
                         <input id="gm-delta" type="number" value="10" class="comp-select w-24 text-center">
                         <button onclick="gmReponer('${gmEsc(cod)}')" class="flex-1 p-3 bg-[#00C853] text-[#0A2F4F] font-black rounded-lg">➕ Reponer stock</button>
                     </div>
+                    <div class="mt-4 border-t border-white/10 pt-3">
+                        <p class="text-[9px] text-gray-400 uppercase font-black">¿Cambió el costo en el proveedor?</p>
+                        <p class="text-[10px] text-gray-500 mb-1">Costo guardado: ${fmt(costo)}</p>
+                        <div class="flex gap-2">
+                            <input id="gm-costo-prov" type="number" value="${costo}" inputmode="numeric" oninput="gmSimularCosto('${gmEsc(cod)}')" class="comp-select flex-1" placeholder="Costo nuevo del proveedor">
+                            <button onclick="gmGuardarCosto('${gmEsc(cod)}')" class="px-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar costo</button>
+                        </div>
+                        <div id="gm-impacto"></div>
+                    </div>
                     <details class="mt-3">
-                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar datos (nuevo costo del proveedor, precio, nombre)</summary>
+                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar nombre / precio de venta</summary>
                         <div class="grid grid-cols-2 gap-2 mt-2">
                             <input id="gm-nombre" value="${gmEsc(p.nombre)}" placeholder="Nombre" class="comp-select col-span-2">
-                            <input id="gm-precio" type="number" value="${precio}" placeholder="Precio" class="comp-select">
-                            <input id="gm-costo" type="number" value="${costo}" placeholder="Costo" class="comp-select">
+                            <input id="gm-precio" type="number" value="${precio}" placeholder="Precio de venta" class="comp-select col-span-2">
                         </div>
-                        <button onclick="gmGuardar('${gmEsc(cod)}')" class="w-full mt-2 p-2 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar datos</button>
+                        <button onclick="gmGuardar('${gmEsc(cod)}')" class="w-full mt-2 p-2 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar</button>
                     </details>
                 </div>`;
         } else {
@@ -1202,10 +1210,37 @@
         gmEnviar({ tipo: 'reponer', codigo_barra: cod, delta });
     };
     window.gmGuardar = (cod) => {
-        gmEnviar({ tipo: 'guardar', codigo_barra: cod,
-            nombre: (document.getElementById('gm-nombre').value || '').trim(),
-            precio: parseInt(document.getElementById('gm-precio').value || '0', 10),
-            costo: parseInt(document.getElementById('gm-costo').value || '0', 10) });
+        const val = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+        const obj = { tipo: 'guardar', codigo_barra: cod };
+        const nombre = (val('gm-nombre') || '').trim(); if (nombre) obj.nombre = nombre;
+        const precio = val('gm-precio'); if (precio) obj.precio = parseInt(precio, 10);
+        const costo = val('gm-costo'); if (costo) obj.costo = parseInt(costo, 10);
+        gmEnviar(obj);
+    };
+    window.gmGuardarCosto = (cod) => {
+        const el = document.getElementById('gm-costo-prov');
+        gmEnviar({ tipo: 'guardar', codigo_barra: cod, costo: parseInt((el ? el.value : '0') || '0', 10) });
+    };
+    window.gmSimularCosto = (cod) => {
+        const out = document.getElementById('gm-impacto');
+        const p = makitoCatalogo.find(x => String(x.codigo_barra || '') === String(cod));
+        if (!out || !p) return;
+        const precio = num(p.precio), costoViejo = num(p.costo), v30 = num(p.vendidos_30);
+        const costoNuevo = parseInt(document.getElementById('gm-costo-prov').value || '0', 10);
+        if (!costoNuevo || costoNuevo === costoViejo) { out.innerHTML = ''; return; }
+        const dCosto = costoNuevo - costoViejo, dPct = costoViejo > 0 ? Math.round(dCosto / costoViejo * 100) : 0;
+        const margenViejo = precio - costoViejo, margenNuevo = precio - costoNuevo;
+        const mnPct = precio > 0 ? Math.round(margenNuevo / precio * 100) : 0;
+        const impactoMes = -dCosto * v30;                       // + si el costo baja, − si sube
+        const precioSug = Math.ceil((costoNuevo + margenViejo) / 50) * 50;
+        const sube = dCosto > 0, col = sube ? '#F87171' : '#00C853';
+        const fila = (lbl, val, c) => `<div class="flex justify-between text-[11px]"><span class="text-gray-400">${lbl}</span><span class="font-black" style="color:${c || '#fff'}">${val}</span></div>`;
+        out.innerHTML = `<div class="mt-2 rounded-lg p-2" style="background:${col}18">
+            ${fila('Costo', `${sube ? '+' : '−'}${fmt(Math.abs(dCosto))} (${dPct >= 0 ? '+' : ''}${dPct}%)`, col)}
+            ${fila('Margen', `${fmt(margenViejo)} → ${fmt(margenNuevo)} (${mnPct}%)`, margenNuevo < 0 ? '#F87171' : '#fff')}
+            ${v30 > 0 ? fila(`A tu ritmo (${v30}/mes)`, `${impactoMes >= 0 ? '+' : '−'}${fmt(Math.abs(impactoMes))}/mes`, col) : ''}
+            ${margenNuevo < 0 ? `<p class="text-[11px] font-black text-[#F87171] mt-1">⚠ Vendes a pérdida</p>` : (sube ? fila('Sugerido', fmt(precioSug), '#FFD700') : '')}
+        </div>`;
     };
     window.gmCrear = (cod) => {
         const nombre = (document.getElementById('gm-nombre').value || '').trim();
