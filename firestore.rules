@@ -5,61 +5,61 @@ rules_version = '2';
 //  Proyecto: vive-quintay-spa
 //
 //  Modelo:
-//   - Datos OPERATIVOS (patentes): accesibles para el Verificador
-//     de terreno, que funciona sin login. Baja sensibilidad.
-//   - Datos FINANCIEROS (recaudacion, cierres, stats): SOLO lectura
-//     para el admin autenticado. Nadie mas.
-//   - El programa Python (caja) escribe con service account /
-//     Admin SDK, que IGNORA estas reglas: sus escrituras no se ven
-//     afectadas por los "allow write: if false".
+//   - OPERATIVO (patentes / config): el Verificador AHORA exige login
+//     (request.auth != null). Escribe config solo Python (Admin SDK).
+//   - ATRIBUCION (ingresos): log append-only por operador (Fase 1/2).
+//   - FINANCIERO (cierres / stats / catalogo Makito): solo el admin
+//     autenticado (isAdmin por email). El cliente nunca escribe plata.
+//   - Python (caja) escribe con Admin SDK, que IGNORA estas reglas.
 // =============================================================
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Correo de la cuenta de administrador (creada en Firebase Auth).
-    // Si cambias el correo, actualizalo aqui y en index.html (ADMIN_EMAIL).
     function isAdmin() {
       return request.auth != null
           && request.auth.token.email == 'admin@vivequintay.cl';
     }
 
-    // ---------- OPERATIVO (Verificador, sin login) ----------
-
-    // Patentes activas: los trabajadores leen y registran tickets.
+    // OPERATIVO (Verificador — AHORA exige login)
     match /activos/{doc} {
-      allow read, write: if true;
+      allow read, write: if request.auth != null;
     }
-
-    // Listas de configuracion operativa (blacklist / frecuentes):
-    // los trabajadores solo LEEN. Escribe unicamente Python (Admin SDK).
     match /config/{doc} {
-      allow read: if true;
+      allow read: if request.auth != null;
       allow write: if false;
     }
 
-    // ---------- FINANCIERO (solo admin autenticado) ----------
+    // ATRIBUCION (Fase 1/2) — log append-only de ingresos por operador.
+    // Crear: cualquier operador logueado, SOLO bajo su propio uid (anti-forja).
+    // Leer: solo el admin del Verificador (claim rol == administrador) para el Panel.
+    // Inmutable: nadie edita ni borra.
+    match /ingresos/{doc} {
+      allow create: if request.auth != null
+                    && request.resource.data.operador_uid == request.auth.uid;
+      allow read: if request.auth != null
+                  && request.auth.token.rol == 'administrador';
+      allow update, delete: if false;
+    }
 
+    // FINANCIERO (solo admin autenticado)
     match /historico_cierres/{doc} {
       allow read: if isAdmin();
       allow write: if false;
     }
-
     match /admin_stats/{doc} {
       allow read: if isAdmin();
       allow write: if false;
     }
-
     match /configuracion/{doc} {
       allow read: if isAdmin();
       allow write: if false;
     }
 
-    // ---------- Gestión de catálogo Makito (admin, desde el teléfono) ----------
-    // El catálogo lo ESPEJA solo la caja (Python/Admin SDK). El teléfono admin lo LEE
-    // (para escanear/listar) y deja ÓRDENES de cambio en 'makito_cambios' (guardar/reponer).
-    // La caja las aplica y las marca (Admin SDK, ignora estas reglas); el cliente NO puede
-    // editar el catálogo ni modificar/borrar las órdenes ya enviadas.
+    // GESTION DE CATALOGO MAKITO (admin, desde el telefono)
+    // El catalogo lo ESPEJA solo la caja (Admin SDK). El telefono admin lo LEE
+    // (para escanear/listar) y deja ORDENES de cambio en 'makito_cambios'. La caja
+    // las aplica y las marca (Admin SDK); el cliente NO edita catalogo ni ordenes.
     match /makito_catalogo/{doc} {
       allow read: if isAdmin();
       allow write: if false;
@@ -69,8 +69,7 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // ---------- Todo lo demas: cerrado ----------
-    // (Firestore ya niega por defecto lo no declarado; esto lo deja explicito.)
+    // Todo lo demas: cerrado
     match /{document=**} {
       allow read, write: if false;
     }
