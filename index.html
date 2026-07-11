@@ -40,6 +40,8 @@
         .comp-select { background: #1B263B; color: #fff; font-size: 12px; border-radius: 10px; padding: 8px; border: 1px solid #1B263B; outline: none; -webkit-appearance: none; appearance: none; }
         .comp-select:focus { border-color: #00E0D0; }
         input.comp-select::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+        .tabbtn { color: #6B7280; }
+        .tabbtn.active { background: #ffffff; color: #0A2F4F; }
     </style>
 </head>
 <body class="p-4 mb-10">
@@ -63,6 +65,15 @@
             <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 hover:text-[#00E0D0] text-xl leading-none transition-colors">&#128274;</button>
         </div>
     </header>
+
+    <div class="sticky top-0 z-40 bg-[#0A2F4F] pt-1 pb-3 -mx-4 px-4 mb-2">
+        <div class="flex gap-1 bg-[#0D3B5C] p-1 rounded-2xl">
+            <button data-tab="parking" onclick="mostrarTab('parking')" class="tabbtn active flex-1 py-3 rounded-xl text-sm font-black transition-all">🅿️ Parking</button>
+            <button data-tab="makito" onclick="mostrarTab('makito')" class="tabbtn flex-1 py-3 rounded-xl text-sm font-black transition-all">🛒 Makito</button>
+        </div>
+    </div>
+
+    <div id="tab-parking">
 
     <div class="card border-t-4 border-[#00C853] p-0 overflow-hidden">
         <div class="carousel-container">
@@ -142,17 +153,6 @@
         </div>
     </div>
 
-    <div class="card border-t-4 border-[#FFB300]">
-        <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛒 Kiosco Makito</h2>
-        <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
-    </div>
-
-    <div class="card border-t-4 border-[#FFB300]">
-        <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
-        <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
-        <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
-    </div>
-
     <div class="card border-t-4 border-[#00E0D0]">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🔮 Proyección</h2>
         <div id="pred-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
@@ -198,6 +198,21 @@
         <div class="history-scroll" id="lista-cierres"><p class="text-gray-500 italic text-center text-xs">Cargando...</p></div>
         <div class="fade-bottom"></div>
     </div>
+
+    </div><!-- /tab-parking -->
+
+    <div id="tab-makito" class="hidden">
+        <div class="card border-t-4 border-[#FFB300]">
+            <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛒 Kiosco Makito</h2>
+            <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+        </div>
+
+        <div class="card border-t-4 border-[#FFB300]">
+            <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
+            <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
+            <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
+        </div>
+    </div><!-- /tab-makito -->
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
         <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic tracking-tighter">VIVE QUINTAY</h1>
@@ -1099,6 +1114,16 @@
             <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total recaudado del mes (parking + kiosco).</p>
         `;
     }
+
+    // ---------- NAVEGACIÓN POR PESTAÑAS (Parking / Makito) ----------
+    window.mostrarTab = (t) => {
+        document.getElementById('tab-parking').classList.toggle('hidden', t !== 'parking');
+        document.getElementById('tab-makito').classList.toggle('hidden', t !== 'makito');
+        document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        // los gráficos que se pintaron mientras la pestaña estaba oculta quedan en 0px → re-dimensionar
+        if (t === 'parking') setTimeout(() => { try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {} }, 60);
+    };
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
     let gmStream = null, gmScanning = false;
