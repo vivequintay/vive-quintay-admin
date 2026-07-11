@@ -208,6 +208,15 @@
         </div>
 
         <div class="card border-t-4 border-[#FFB300]">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">📦 Catálogo · Inventario</h2>
+                <span id="inv-count" class="text-[10px] text-gray-500 font-bold"></span>
+            </div>
+            <input id="inv-filtro" oninput="renderInventario()" class="comp-select w-full mb-3" placeholder="Filtrar por nombre o código…">
+            <div id="inv-lista" class="space-y-2"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+        </div>
+
+        <div class="card border-t-4 border-[#FFB300]">
             <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
             <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
             <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
@@ -475,6 +484,7 @@
         onSnapshot(doc(db, "makito_catalogo", "catalogo"), (ds) => {
             makitoCatalogo = ds.exists() ? (ds.data().productos || []) : [];
             try { gmRenderCatalogo(); } catch (e) {}
+            try { renderInventario(); } catch (e) {}
         }, (err) => console.error('makito_catalogo (¿reglas publicadas?):', err));
         onSnapshot(collection(db, "makito_cambios"), (snap) => {
             makitoCambios = snap.docs.map(d => d.data());
@@ -1331,6 +1341,35 @@
         gmFlash('Producto seleccionado.');
         try { document.getElementById('gm-panel').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
     };
+
+    // Inventario visible en la pestaña Makito (mismo espejo makitoCatalogo que el gestor).
+    // Stock bajo (<=5) primero y en rojo. Tocar un producto abre el gestor ya seleccionado.
+    window.renderInventario = () => {
+        const cont = document.getElementById('inv-lista');
+        const count = document.getElementById('inv-count');
+        if (!cont) return;
+        if (count) count.textContent = makitoCatalogo.length ? (makitoCatalogo.length + ' productos') : '';
+        if (!makitoCatalogo.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Aún no llega el catálogo desde la caja.</p>";
+            return;
+        }
+        const fEl = document.getElementById('inv-filtro');
+        const q = (fEl ? fEl.value : '').trim().toLowerCase();
+        const lista = makitoCatalogo.filter(p => !q
+            || String(p.nombre || '').toLowerCase().includes(q)
+            || String(p.codigo_barra || '').toLowerCase().includes(q));
+        if (!lista.length) { cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin coincidencias.</p>"; return; }
+        const ord = lista.slice().sort((a, b) => num(a.stock) - num(b.stock));
+        cont.innerHTML = ord.map(p => {
+            const bajo = num(p.stock) <= 5;
+            return `<div onclick="invTocar('${gmEsc(p.codigo_barra)}')" class="flex justify-between items-center glass p-3 active:scale-95 transition-all cursor-pointer">
+                <div><span class="text-sm font-bold text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</span><br><span class="text-[9px] text-gray-500">${gmEsc(p.codigo_barra) || 'sin código'} · ${fmt(p.precio)}</span></div>
+                <span class="text-sm font-black ${bajo ? 'text-[#F87171]' : 'text-[#00C853]'}">${num(p.stock)} u.</span>
+            </div>`;
+        }).join('');
+    };
+    // Abre el gestor ya posicionado en el producto (para reponer o corregir).
+    window.invTocar = (cod) => { gmOpen(); if (cod) gmTocarProducto(cod); };
 
     window.abrirModal = (idx) => {
         const d = cierresData[idx];
