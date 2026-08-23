@@ -12,6 +12,9 @@
     import { getFirestore, doc, onSnapshot, collection, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+// Piezas sin estado (ver js/util.js)
+import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './util.js';
+
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
@@ -35,28 +38,8 @@
     let makitoCambios = [];    // cola de órdenes del teléfono (pendiente/aplicado)
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
-    const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
-    const fmt = (n) => `$${Math.round(num(n)).toLocaleString('es-CL')}`; // CLP sin decimales, miles consistentes
     document.getElementById('label-anio-actual').innerText = anioActual;
 
-    // Anima un numero desde su valor actual al nuevo (count-up suave).
-    function animateNum(id, to, isMoney) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        to = Math.round(num(to));
-        const from = Number(el.dataset.val || 0);
-        el.dataset.val = to;
-        const render = (v) => el.innerText = isMoney ? fmt(v) : Math.round(v).toLocaleString('es-CL');
-        if (from === to) { render(to); return; }
-        const dur = 600, t0 = performance.now();
-        const step = (t) => {
-            const p = Math.min(1, (t - t0) / dur);
-            const eased = 1 - Math.pow(1 - p, 3);
-            render(from + (to - from) * eased);
-            if (p < 1) requestAnimationFrame(step);
-        };
-        requestAnimationFrame(step);
-    }
 
     // Agrega indicadores de posicion (dots) a cada carrusel y los sincroniza con el scroll.
     function initCarouselDots() {
@@ -275,7 +258,6 @@
     }
 
     // ---------- COMPARADOR (dia / mes / anio) ----------
-    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
     // Agrupa los cierres segun el modo activo. Devuelve periodos en orden
     // (mas reciente primero, heredado del orden de todosLosCierres).
@@ -301,9 +283,7 @@
     }
 
     // Helpers de fecha para el modo Dia (calendario nativo)
-    const isoKey = (dte) => `${dte.getFullYear()}-${String(dte.getMonth() + 1).padStart(2, '0')}-${String(dte.getDate()).padStart(2, '0')}`;
     const cierreDeFechaISO = (iso) => iso ? (todosLosCierres.find(c => isoKey(c.date) === iso) || null) : null;
-    const fechaCortaISO = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
 
     function compToggleUI() {
         const esDia = compModo === 'dia';
@@ -857,7 +837,6 @@
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
     let gmStream = null, gmScanning = false, gmDetector = null;
-    const gmEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
     function gmFlash(msg) { const m = document.getElementById('gm-scan-msg'); if (m) m.textContent = msg; }
 
     // POR QUÉ EL ESCÁNER PUEDE NO ANDAR, EN CONCRETO.
