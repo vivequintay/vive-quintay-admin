@@ -4,13 +4,16 @@ rules_version = '2';
 //  Vive Quintay - Reglas de seguridad Firestore
 //  Proyecto: vive-quintay-spa
 //
+//  ESTE ARCHIVO ES UNA COPIA. Las reglas que rigen son las desplegadas en la
+//  consola de Firebase; esta copia existe para versionarlas y revisarlas en el
+//  repo. Si se cambian alla, hay que traerlas aca — ya se desincronizaron una vez.
+//
 //  Modelo:
-//   - OPERATIVO (patentes / config): el Verificador AHORA exige login
-//     (request.auth != null). Escribe config solo Python (Admin SDK).
-//   - ATRIBUCION (ingresos): log append-only por operador (Fase 1/2).
-//   - FINANCIERO (cierres / stats / catalogo Makito): solo el admin
-//     autenticado (isAdmin por email). El cliente nunca escribe plata.
-//   - Python (caja) escribe con Admin SDK, que IGNORA estas reglas.
+//   - OPERATIVO (patentes / config): el Verificador exige login.
+//   - ATRIBUCION (ingresos): log append-only por operador.
+//   - FINANCIERO (cierres / stats / historia del kiosco): solo el admin
+//     autenticado, y de SOLO LECTURA. El cliente nunca escribe plata.
+//   - La caja (Python) escribe con Admin SDK, que IGNORA estas reglas.
 // =============================================================
 
 service cloud.firestore {
@@ -21,7 +24,7 @@ service cloud.firestore {
           && request.auth.token.email == 'admin@vivequintay.cl';
     }
 
-    // OPERATIVO (Verificador — AHORA exige login)
+    // OPERATIVO (Verificador — exige login)
     match /activos/{doc} {
       allow read, write: if request.auth != null;
     }
@@ -30,10 +33,7 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // ATRIBUCION (Fase 1/2) — log append-only de ingresos por operador.
-    // Crear: cualquier operador logueado, SOLO bajo su propio uid (anti-forja).
-    // Leer: solo el admin del Verificador (claim rol == administrador) para el Panel.
-    // Inmutable: nadie edita ni borra.
+    // ATRIBUCION (Fase 1/2) — log append-only por operador
     match /ingresos/{doc} {
       allow create: if request.auth != null
                     && request.resource.data.operador_uid == request.auth.uid;
@@ -51,25 +51,22 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
-
-    // HISTORIA DEL KIOSCO — un documento por mes, con el detalle diario adentro.
-    // Trae los dos años y medio que Makito vendió en Eleventa (nov-2023 -> jun-2026) mas
-    // lo que la caja vaya sumando. Se agrupa por mes y no por dia a proposito: 22 lecturas
-    // por apertura en vez de 251. Escribe SOLO la caja con Admin SDK, que ignora estas
-    // reglas; desde el navegador es de solo lectura como todo lo financiero.
-    match /historico_kiosco/{doc} {
-      allow read: if isAdmin();
-      allow write: if false;
-    }
     match /configuracion/{doc} {
       allow read: if isAdmin();
       allow write: if false;
     }
 
+    // ▼▼▼ NUEVO — HISTORIA DEL KIOSCO ▼▼▼
+    // Un documento por MES con el detalle diario adentro. Trae los dos anios y medio
+    // que Makito vendio en Eleventa (nov-2023 -> jun-2026) mas lo que la caja sume.
+    // Agrupado por mes y no por dia a proposito: 22 lecturas por apertura en vez de 251.
+    match /historico_kiosco/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    // ▲▲▲ NUEVO ▲▲▲
+
     // GESTION DE CATALOGO MAKITO (admin, desde el telefono)
-    // El catalogo lo ESPEJA solo la caja (Admin SDK). El telefono admin lo LEE
-    // (para escanear/listar) y deja ORDENES de cambio en 'makito_cambios'. La caja
-    // las aplica y las marca (Admin SDK); el cliente NO edita catalogo ni ordenes.
     match /makito_catalogo/{doc} {
       allow read: if isAdmin();
       allow write: if false;
