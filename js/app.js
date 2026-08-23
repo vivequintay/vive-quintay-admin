@@ -14,6 +14,7 @@
 
 // Piezas sin estado (ver js/util.js)
 import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './util.js';
+import { escanear, detener as detenerEscaner } from './escaner.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -836,32 +837,7 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
     };
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
-    let gmStream = null, gmScanning = false, gmDetector = null;
     function gmFlash(msg) { const m = document.getElementById('gm-scan-msg'); if (m) m.textContent = msg; }
-
-    // POR QUÉ EL ESCÁNER PUEDE NO ANDAR, EN CONCRETO.
-    // Antes todo terminaba en el mismo "No pude abrir la cámara", y con eso era imposible
-    // saber si faltaba el permiso, si el teléfono perdió el lector de códigos o si la
-    // página no venía por HTTPS. Tres causas distintas con tres arreglos distintos.
-    function gmDiagnostico() {
-        return [
-            window.isSecureContext ? 'HTTPS ok' : 'SIN HTTPS',
-            (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'cámara ok' : 'sin API de cámara',
-            ('BarcodeDetector' in window) ? 'lector ok' : 'SIN lector de códigos',
-        ].join(' · ');
-    }
-
-    // El navegador informa la causa en el NOMBRE de la excepción, no en su texto.
-    function gmMotivoCamara(e) {
-        switch (e && e.name) {
-            case 'NotAllowedError':     return 'Permiso de cámara denegado';
-            case 'NotFoundError':       return 'Este equipo no tiene cámara';
-            case 'NotReadableError':    return 'La cámara está ocupada por otra aplicación';
-            case 'OverconstrainedError':return 'No hay cámara trasera disponible';
-            case 'SecurityError':       return 'El navegador bloqueó la cámara por seguridad';
-            default:                    return 'No se pudo abrir la cámara (' + ((e && e.name) || e) + ')';
-        }
-    }
 
     window.gmOpen = (conCamara = true) => {
         const caja = document.getElementById('gestor-makito');
@@ -893,76 +869,17 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
         }
     };
     window.gmClose = () => { gmStop(); document.getElementById('gestor-makito').classList.add('hidden'); };
-    window.gmStop = () => {
-        gmScanning = false;
-        if (gmStream) { gmStream.getTracks().forEach(t => t.stop()); gmStream = null; }
-    };
-    window.gmStart = async () => {
-        const video = document.getElementById('gm-video');
-
-        // 1) LA CÁMARA SE PIDE SIEMPRE, aunque falte el lector de códigos.
-        // Antes se salía antes de llegar acá si no había `BarcodeDetector`, así que la
-        // cámara ni se intentaba y el síntoma era "dejó de abrir" sin más pistas. Verla
-        // encendida separa dos problemas: el permiso del teléfono y el decodificador.
-        gmFlash('Abriendo cámara…');
-        try {
-            gmStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
-            video.srcObject = gmStream;
-            await video.play();
-        } catch (e) {
-            gmFlash(gmMotivoCamara(e) + '. Ingresa el código a mano. [' + gmDiagnostico() + ']');
-            return;
-        }
-
-        // 2) EL LECTOR. `BarcodeDetector` es una API del navegador que en Android depende
-        // de un módulo de Google Play Services: una actualización puede quitarla sin que
-        // nadie toque nada. Si no está, la cámara QUEDA ABIERTA a propósito —sirve para
-        // confirmar que el permiso está bien— y el mensaje dice qué falta.
-        if (!('BarcodeDetector' in window)) {
-            gmFlash('La cámara funciona, pero este navegador ya no trae el lector de códigos. '
-                  + 'Ingresa el código a mano. [' + gmDiagnostico() + ']');
-            return;
-        }
-        try {
-            gmDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'codabar', 'itf'] });
-        } catch (e) {
-            gmFlash('El lector de códigos no arrancó: ' + ((e && e.name) || e)
-                  + '. Ingresa el código a mano.');
-            return;
-        }
-
-        gmScanning = true;
-        gmFlash('Apunta al código de barras…');
-        let fallos = 0;
-        const tick = async () => {
-            if (!gmScanning) return;
-            try {
-                const codes = await gmDetector.detect(video);
-                if (codes && codes.length) {
-                    const c = codes[0].rawValue;
-                    gmStop();
-                    document.getElementById('gm-cod').value = c;
-                    gmRenderPanel(c);
-                    gmFlash('Código leído: ' + c);
-                    return;
-                }
-                fallos = 0;
-            } catch (e) {
-                // Antes esto se tragaba en silencio y el escáner "no hacía nada", sin
-                // explicación posible. Fallar en algunos cuadros es normal (imagen movida
-                // o borrosa); fallar treinta seguidos significa que el decodificador está
-                // roto, y eso hay que decirlo en vez de dejar la cámara girando en vano.
-                if (++fallos >= 30) {
-                    gmScanning = false;
-                    gmFlash('El lector de códigos está fallando: ' + ((e && e.name) || e)
-                          + '. Ingresa el código a mano. [' + gmDiagnostico() + ']');
-                    return;
-                }
-            }
-            requestAnimationFrame(tick);
-        };
-        requestAnimationFrame(tick);
-    };
+    // El escáner vive en js/escaner.js y NO sabe qué es un producto: enciende la cámara,
+    // lee, y avisa el código. Lo que se hace con él se decide acá.
+    window.gmStop = detenerEscaner;
+    window.gmStart = () => escanear({
+        video: document.getElementById('gm-video'),
+        avisar: gmFlash,
+        alLeer: (cod) => {
+            document.getElementById('gm-cod').value = cod;
+            gmRenderPanel(cod);
+        },
+    });
     window.gmBuscar = () => { const c = document.getElementById('gm-cod').value.trim(); if (c) gmRenderPanel(c); };
 
     function gmRenderPanel(cod) {
