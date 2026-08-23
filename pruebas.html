@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Pruebas — Vive Quintay Admin</title>
+<style>
+ body { font-family: ui-monospace, Consolas, monospace; background:#0A2F4F; color:#fff; padding:20px; }
+ .ok { color:#00C853; } .mal { color:#F87171; font-weight:bold; }
+ h1 { font-size:16px; color:#FFB300; }
+</style>
+</head>
+<body>
+<h1>Pruebas de la lógica del kiosco</h1>
+<pre id="salida">corriendo…</pre>
+
+<script type="module">
+// PRUEBAS DE LA LOGICA DEL KIOSCO.
+// -----------------------------------------------------------------------------
+// Se abren en un navegador de verdad (el arnes las corre sin ventana) y comprueban las
+// funciones PURAS de kiosco.js: la costura de las dos epocas y la comparacion interanual.
+// Ahi hay cuentas de plata, y hasta ahora este proyecto no tenia forma de verificarlas.
+//
+// No prueban el dibujo —eso necesita datos reales y sesion— sino lo que decide los numeros
+// que el dibujo muestra, que es donde un error pasa desapercibido.
+
+import { unirHistoria, serieMensual, compararAnioAnterior } from './js/kiosco.js';
+
+const res = [];
+let malas = 0;
+
+function igual(nombre, obtenido, esperado) {
+    const a = JSON.stringify(obtenido), b = JSON.stringify(esperado);
+    const ok = a === b;
+    if (!ok) malas++;
+    res.push(`${ok ? '  ok  ' : ' MAL  '} ${nombre}${ok ? '' : `\n         esperaba ${b}\n         obtuvo   ${a}`}`);
+}
+
+// ---- unirHistoria: las dos epocas ----
+const HIST = {
+    '2026-05': { total: 364517, ganancia: 195668, tickets: 224, dias_abiertos: 13, dias: { '3': { t: 50000, g: 25000 } } },
+    '2026-06': { total: 144755, ganancia: 73235, tickets: 95, dias_abiertos: 7, dias: {} },
+};
+const CIERRES = [
+    { date: new Date(2026, 6, 12), makito: { total: 90000, ganancia: 48000 } },   // julio
+    { date: new Date(2026, 6, 19), makito: { total: 60000, ganancia: 31000 } },
+    { date: new Date(2026, 5, 20), makito: { total: 999999, ganancia: 999999 } }, // junio: lo pisa el historico
+];
+
+const unida = unirHistoria(HIST, CIERRES);
+igual('junio manda el historico, no el cierre', unida['2026-06'].total, 144755);
+igual('julio se arma sumando los cierres', unida['2026-07'].total, 150000);
+igual('julio suma tambien la ganancia', unida['2026-07'].ganancia, 79000);
+igual('el detalle diario del historico sobrevive', unida['2026-05'].dias['3'].t, 50000);
+igual('los cierres dejan su dia', unida['2026-07'].dias[12].t, 90000);
+igual('sin datos no inventa meses', unida['2026-08'], undefined);
+
+// ---- serieMensual: sin huecos ----
+const serie = serieMensual(unida, new Date(2026, 6, 15), 4);
+igual('devuelve exactamente los meses pedidos', serie.length, 4);
+igual('van en orden cronologico', serie.map(x => x.clave), ['2026-04', '2026-05', '2026-06', '2026-07']);
+igual('un mes sin datos vale cero, no desaparece', serie[0].total, 0);
+igual('los meses con datos traen su total', serie[3].total, 150000);
+
+// ---- compararAnioAnterior ----
+const conAnterior = unirHistoria({
+    '2025-07': { total: 100000, ganancia: 50000 },
+    '2026-07': { total: 150000, ganancia: 80000 },
+}, []);
+const c = compararAnioAnterior(conAnterior, new Date(2026, 6, 15));
+igual('compara contra el MISMO mes del año pasado', Math.round(c.variacion), 50);
+igual('dice contra que periodo compara', c.etiqueta, 'Jul-25');
+
+const baja = compararAnioAnterior(unirHistoria({
+    '2025-07': { total: 200000 }, '2026-07': { total: 150000 },
+}, []), new Date(2026, 6, 15));
+igual('una caida sale negativa', Math.round(baja.variacion), -25);
+
+igual('sin año anterior no inventa comparacion',
+      compararAnioAnterior(unirHistoria({ '2026-07': { total: 1 } }, []), new Date(2026, 6, 1)), null);
+igual('con el año anterior en cero tampoco (evita dividir por cero)',
+      compararAnioAnterior(unirHistoria({ '2025-07': { total: 0 }, '2026-07': { total: 5 } }, []), new Date(2026, 6, 1)), null);
+
+// ---- entradas de mala fe ----
+igual('sin nada devuelve vacio', unirHistoria(null, null), {});
+igual('un cierre sin fecha no revienta', unirHistoria({}, [{ makito: { total: 5 } }]), {});
+igual('un cierre sin makito cuenta cero',
+      unirHistoria({}, [{ date: new Date(2026, 0, 5) }])['2026-01'].total, 0);
+
+document.getElementById('salida').innerHTML =
+    res.join('\n') + `\n\nRESULTADO_PRUEBAS:${malas === 0 ? 'TODAS OK (' + res.length + ')' : malas + ' FALLARON'}`;
+</script>
+</body>
+</html>

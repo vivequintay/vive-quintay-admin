@@ -231,6 +231,23 @@
             <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
         </div>
 
+        <!-- LA TENDENCIA, que es lo que faltaba. Antes la sección eran ocho cifras
+             apiladas: para saber si el mes iba bien había que acordarse del anterior. -->
+        <div class="card border-t-4 border-[#FFB300] p-0 overflow-hidden">
+            <div class="p-4 pb-0">
+                <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">📈 Últimos 12 meses</h2>
+                <p class="text-[9px] text-gray-500 mt-1">Barra: vendido · Línea: ganancia</p>
+            </div>
+            <div class="p-3" style="height:210px"><canvas id="chartKioscoMeses"></canvas></div>
+        </div>
+
+        <div class="card border-t-4 border-[#00E0D0] p-0 overflow-hidden">
+            <div class="p-4 pb-0">
+                <h2 id="titulo-mes-kiosco" class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">📅 Este mes, día por día</h2>
+            </div>
+            <div class="p-3" style="height:190px"><canvas id="chartKioscoDias"></canvas></div>
+        </div>
+
         <!-- GESTIÓN ANTES QUE CATÁLOGO, a propósito. Es la acción del día —escanear para
              reponer— y estaba al final, después de una lista de 294 productos que había
              que recorrer entera para llegar. Lo que se usa va arriba; lo que se consulta,

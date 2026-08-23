@@ -16,6 +16,8 @@
 import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './util.js';
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
+import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
+         renderMesKiosco } from './kiosco.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -36,7 +38,8 @@ import { charts, renderPie, renderLine, renderBar } from './graficos.js';
     let makitoCierreHoy = null;   // makito del cierre de HOY (para no mostrar 0 tras cerrar)
     let makitoAcum = { M: { total:0, ganancia:0, ef:0, tj:0, und:0 }, A: { total:0, ganancia:0, ef:0, tj:0, und:0 } };
     let makitoCatalogo = [];   // espejo del catálogo que sube la caja (para escanear/listar)
-    let makitoCambios = [];    // cola de órdenes del teléfono (pendiente/aplicado)
+    let makitoCambios = [];
+    let historiaKiosco = {};   // un doc por mes (historico_kiosco), nov-2023 en adelante    // cola de órdenes del teléfono (pendiente/aplicado)
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
     document.getElementById('label-anio-actual').innerText = anioActual;
@@ -190,6 +193,15 @@ import { charts, renderPie, renderLine, renderBar } from './graficos.js';
             try { gmRenderCatalogo(); } catch (e) {}
             try { renderInventario(); } catch (e) {}
         }, (err) => console.error('makito_catalogo (¿reglas publicadas?):', err));
+        // Historia del kiosco: un documento por MES, con el detalle diario adentro.
+        // Trae los dos años y medio de Eleventa; los meses que la caja ya publica en los
+        // cierres se mezclan encima (ver unirHistoria en js/kiosco.js).
+        onSnapshot(collection(db, "historico_kiosco"), (snap) => {
+            historiaKiosco = {};
+            snap.docs.forEach(d => { historiaKiosco[d.id] = d.data(); });
+            try { renderMakito(); } catch (e) { console.error('historia kiosco:', e); }
+        }, (err) => console.error('historico_kiosco (¿reglas publicadas?):', err));
+
         onSnapshot(collection(db, "makito_cambios"), (snap) => {
             makitoCambios = snap.docs.map(d => d.data());
             makitoCambios.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
@@ -746,42 +758,81 @@ import { charts, renderPie, renderLine, renderBar } from './graficos.js';
     function renderMakito() {
         const cont = document.getElementById('makito-contenido');
         if (!cont) return;
-        // "Hoy": si la jornada está abierta usa lo vivo; si cerró, el makito del cierre de hoy.
+
+        // Las dos epocas del kiosco, cosidas: Eleventa hasta jun-2026 y los cierres de la
+        // caja desde julio. Ver unirHistoria en js/kiosco.js.
+        const unida = unirHistoria(historiaKiosco, todosLosCierres);
+        const ahora = new Date();
+
+        // "Hoy": si la jornada esta abierta usa lo vivo; si cerro, el makito del cierre de hoy.
         const live = (makitoHoy && num(makitoHoy.total) > 0) ? makitoHoy : (makitoCierreHoy || {});
         const hoyT = num(live.total), hoyG = num(live.ganancia), hoyU = num(live.unidades);
-        // Mes/año = histórico + lo de hoy en vivo (consistente con las tarjetas del parking).
         const M = makitoAcum.M, A = makitoAcum.A;
         const mesT = num(M.total) + num(makitoHoy.total), mesG = num(M.ganancia) + num(makitoHoy.ganancia);
         const mesEf = num(M.ef) + num(makitoHoy.efectivo), mesTj = num(M.tj) + num(makitoHoy.tarjeta);
-        const anioT = num(A.total) + num(makitoHoy.total), anioU = num(A.und) + num(makitoHoy.unidades);
+        const anioT = num(A.total) + num(makitoHoy.total);
         const margen = mesT > 0 ? (mesG / mesT * 100) : 0;
         const parkingMes = num(acum.M) + num(dataHoy.total);
         const aporte = (mesT + parkingMes) > 0 ? (mesT / (mesT + parkingMes) * 100) : 0;
 
-        if (hoyT === 0 && mesT === 0 && anioT === 0) {
-            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>El kiosco aún no registra ventas. Aparecerán aquí cuando la caja (Python) las sincronice.</p>";
+        const hayHistoria = Object.keys(unida).length > 0;
+        if (hoyT === 0 && mesT === 0 && anioT === 0 && !hayHistoria) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>El kiosco aún no registra ventas. Aparecerán aquí cuando la caja las sincronice.</p>";
             return;
         }
+
+        // Este mes contra el MISMO mes del año pasado: la comparación que sirve en un
+        // negocio de temporada. Solo aparece si hay con qué comparar.
+        const comp = compararAnioAnterior(unida, ahora);
+        const flecha = comp ? (comp.variacion >= 0 ? '▲' : '▼') : '';
+        const colorComp = comp ? (comp.variacion >= 0 ? '#00C853' : '#F87171') : '';
+
         cont.innerHTML = `
-            <div class="mb-4">
-                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Venta Makito · hoy</p>
-                <p class="text-3xl font-black text-[#FFB300]">${fmt(hoyT)}</p>
-                <p class="text-xs text-gray-400 mt-1">Ganancia <b class="text-[#00C853]">${fmt(hoyG)}</b> · ${hoyU.toLocaleString('es-CL')} u.</p>
+            <div class="text-center mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Vendido hoy</p>
+                <p class="text-4xl font-black text-[#FFB300] leading-tight">${fmt(hoyT)}</p>
+                <p class="text-xs text-gray-400 mt-1">Ganancia <b class="text-[#00C853]">${fmt(hoyG)}</b>${hoyU ? ` · ${hoyU.toLocaleString('es-CL')} u.` : ''}</p>
             </div>
             <div class="grid grid-cols-2 gap-3">
-                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Venta mes</p><p class="text-lg font-black text-white">${fmt(mesT)}</p><p class="text-[10px] text-gray-500">margen ${margen.toFixed(0)}%</p></div>
-                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Ganancia mes</p><p class="text-lg font-black text-[#00C853]">${fmt(mesG)}</p><p class="text-[10px] text-gray-500">${anioU.toLocaleString('es-CL')} u. en el año</p></div>
+                <div class="glass p-3">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Este mes</p>
+                    <p class="text-xl font-black text-white">${fmt(mesT)}</p>
+                    ${comp
+                        ? `<p class="text-[10px] font-black" style="color:${colorComp}">${flecha} ${Math.abs(comp.variacion).toFixed(0)}% vs ${comp.etiqueta}</p>`
+                        : `<p class="text-[10px] text-gray-500">margen ${margen.toFixed(0)}%</p>`}
+                </div>
+                <div class="glass p-3">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Ganancia mes</p>
+                    <p class="text-xl font-black text-[#00C853]">${fmt(mesG)}</p>
+                    <p class="text-[10px] text-gray-500">margen ${margen.toFixed(0)}%</p>
+                </div>
             </div>
-            <div class="grid grid-cols-2 gap-3 mt-3">
-                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[8px] text-gray-400 uppercase font-black">Efectivo mes</p><p class="font-black text-white">${fmt(mesEf)}</p></div>
-                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 uppercase font-black">Tarjeta mes</p><p class="font-black text-white">${fmt(mesTj)}</p></div>
-            </div>
-            <div class="flex justify-between items-center mt-4 pt-3 border-t border-white/10">
-                <span class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Venta año · ${anioActual}</span>
-                <span class="text-lg font-black text-[#FFD700]">${fmt(anioT)}</span>
-            </div>
-            <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total recaudado del mes (parking + kiosco).</p>
+
+            <!-- El detalle fino va PLEGADO. Es dato necesario pero no es lo que se mira
+                 todos los días, y apilado arriba era la mitad del mareo. -->
+            <details class="mt-3">
+                <summary class="text-[10px] text-gray-400 uppercase font-black tracking-widest cursor-pointer select-none">Ver detalle del mes</summary>
+                <div class="grid grid-cols-2 gap-3 mt-2">
+                    <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[8px] text-gray-400 uppercase font-black">Efectivo</p><p class="font-black text-white">${fmt(mesEf)}</p></div>
+                    <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 uppercase font-black">Tarjeta</p><p class="font-black text-white">${fmt(mesTj)}</p></div>
+                </div>
+                <div class="flex justify-between items-center mt-3 pt-3 border-t border-white/10">
+                    <span class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Vendido en ${ahora.getFullYear()}</span>
+                    <span class="text-lg font-black text-[#FFD700]">${fmt(anioT)}</span>
+                </div>
+                <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total del mes (parking + kiosco).</p>
+            </details>
         `;
+
+        const titulo = document.getElementById('titulo-mes-kiosco');
+        if (titulo) titulo.textContent = `📅 ${MESES[ahora.getMonth()]} ${ahora.getFullYear()}, día por día`;
+
+        // Los graficos van DESPUES de pintar el HTML: si el <canvas> todavia no existe o
+        // esta oculto, Chart.js lo dibuja con 0 px y queda en blanco para siempre.
+        try {
+            renderTendenciaKiosco(unida, ahora);
+            renderMesKiosco(unida, ahora);
+        } catch (e) { console.error('graficos kiosco:', e); }
     }
 
     // ---------- NAVEGACIÓN POR PESTAÑAS (Parking / Makito) ----------
