@@ -15,6 +15,7 @@
 // Piezas sin estado (ver js/util.js)
 import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './util.js';
 import { escanear, detener as detenerEscaner } from './escaner.js';
+import { charts, renderPie, renderLine, renderBar } from './graficos.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -25,7 +26,6 @@ import { escanear, detener as detenerEscaner } from './escaner.js';
     // Debe coincidir con el correo definido en firestore.rules (isAdmin).
     const ADMIN_EMAIL = "admin@vivequintay.cl";
 
-    let charts = {};
     let cierresData = [];       // cierres del snapshot actual (para el modal, sin btoa)
     let todosLosCierres = [];   // todos los cierres normalizados (para el comparador)
     let compModo = 'mes';       // modo activo del comparador: dia | mes | anio
@@ -213,48 +213,6 @@ import { escanear, detener as detenerEscaner } from './escaner.js';
             type: 'bar',
             data: { labels: horas.map(h => `${h}h`), datasets: [{ data, backgroundColor: data.map(v => v === maxV ? '#F87171' : '#00E0D0'), borderRadius: 4 }] },
             options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 8 } } } } }
-        });
-    }
-
-    function renderPie(id, data) {
-        if (charts[id]) charts[id].destroy();
-        charts[id] = new Chart(document.getElementById(id), {
-            type: 'doughnut',
-            data: { datasets: [{ data: data[0]+data[1] === 0 ? [1,0] : data, backgroundColor: ['#00C853','#00E0D0'], borderWidth: 0 }] },
-            options: { cutout: '75%', plugins: { legend: { display: false } } }
-        });
-    }
-
-    function renderLine(dict) {
-        const ctx = document.getElementById('chartMensual');
-        const labels = Array.from({length:31},(_,i)=>i+1);
-        const data = labels.map(d => dict[d]||0);
-        if (charts.line) charts.line.destroy();
-        charts.line = new Chart(ctx, {
-            type: 'line',
-            data: { labels, datasets: [{ data, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0,224,208,0.05)' }] },
-            options: { plugins: { legend: false }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 8 } } } } }
-        });
-    }
-
-    function renderBar(arr, arrPrev) {
-        if (charts.bar) charts.bar.destroy();
-        const hayPrev = arrPrev && arrPrev.some(v => v != null && v > 0);
-        const datasets = [{ type: 'bar', label: String(anioActual), data: arr, backgroundColor: '#FFD700', borderRadius: 4, order: 2 }];
-        if (hayPrev) {
-            datasets.unshift({
-                type: 'line', label: String(anioActual - 1), data: arrPrev,
-                borderColor: '#00E0D0', borderWidth: 2, tension: 0.35, pointRadius: 2,
-                fill: false, spanGaps: false, order: 1
-            });
-        }
-        charts.bar = new Chart(document.getElementById('chartAnual'), {
-            type: 'bar',
-            data: { labels: ['E','F','M','A','M','J','J','A','S','O','N','D'], datasets },
-            options: {
-                plugins: { legend: hayPrev ? { display: true, labels: { color: '#9CA3AF', font: { size: 9 }, boxWidth: 10, padding: 8 } } : { display: false } },
-                scales: { y: { display: false } }
-            }
         });
     }
 
