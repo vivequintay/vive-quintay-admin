@@ -51,6 +51,16 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+
+    // HISTORIA DEL KIOSCO — un documento por mes, con el detalle diario adentro.
+    // Trae los dos años y medio que Makito vendió en Eleventa (nov-2023 -> jun-2026) mas
+    // lo que la caja vaya sumando. Se agrupa por mes y no por dia a proposito: 22 lecturas
+    // por apertura en vez de 251. Escribe SOLO la caja con Admin SDK, que ignora estas
+    // reglas; desde el navegador es de solo lectura como todo lo financiero.
+    match /historico_kiosco/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
     match /configuracion/{doc} {
       allow read: if isAdmin();
       allow write: if false;
