@@ -1,0 +1,1270 @@
+// VIVE QUINTAY — ADMIN BI
+// -----------------------------------------------------------------------------
+// Salio de index.html tal cual, sin cambiar una linea. Vivia como un <script
+// type="module"> de 1.264 lineas dentro del HTML; aca empieza a ser codigo con el que se
+// puede trabajar: el editor lo entiende, el verificador lo puede leer y se puede repartir
+// en piezas sin mover el HTML de sitio.
+//
+// Se prueba con `python probar_pwa.py .`, que lo carga en un Chrome sin ventana y avisa si
+// algo no existe. Ese arnes es lo que hace que tocar este archivo no sea a ciegas.
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+    import { getFirestore, doc, onSnapshot, collection, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+
+    const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const auth = getAuth(app);
+
+    // Cuenta de administrador (creada en Firebase Auth > Email/Password).
+    // Debe coincidir con el correo definido en firestore.rules (isAdmin).
+    const ADMIN_EMAIL = "admin@vivequintay.cl";
+
+    let charts = {};
+    let cierresData = [];       // cierres del snapshot actual (para el modal, sin btoa)
+    let todosLosCierres = [];   // todos los cierres normalizados (para el comparador)
+    let compModo = 'mes';       // modo activo del comparador: dia | mes | anio
+    let dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
+    let cierreHoy = null;   // cierre de HOY si la jornada ya cerro (para no mostrar 0)
+    // ---- Kiosco Makito: sub-mapa 'makito' que sube la caja (admin_stats + historico_cierres) ----
+    let makitoHoy = { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+    let makitoCierreHoy = null;   // makito del cierre de HOY (para no mostrar 0 tras cerrar)
+    let makitoAcum = { M: { total:0, ganancia:0, ef:0, tj:0, und:0 }, A: { total:0, ganancia:0, ef:0, tj:0, und:0 } };
+    let makitoCatalogo = [];   // espejo del catálogo que sube la caja (para escanear/listar)
+    let makitoCambios = [];    // cola de órdenes del teléfono (pendiente/aplicado)
+    let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
+    const anioActual = new Date().getFullYear();
+    const num = (n) => Number(n) || 0;                       // evita NaN por datos faltantes
+    const fmt = (n) => `$${Math.round(num(n)).toLocaleString('es-CL')}`; // CLP sin decimales, miles consistentes
+    document.getElementById('label-anio-actual').innerText = anioActual;
+
+    // Anima un numero desde su valor actual al nuevo (count-up suave).
+    function animateNum(id, to, isMoney) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        to = Math.round(num(to));
+        const from = Number(el.dataset.val || 0);
+        el.dataset.val = to;
+        const render = (v) => el.innerText = isMoney ? fmt(v) : Math.round(v).toLocaleString('es-CL');
+        if (from === to) { render(to); return; }
+        const dur = 600, t0 = performance.now();
+        const step = (t) => {
+            const p = Math.min(1, (t - t0) / dur);
+            const eased = 1 - Math.pow(1 - p, 3);
+            render(from + (to - from) * eased);
+            if (p < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+    }
+
+    // Agrega indicadores de posicion (dots) a cada carrusel y los sincroniza con el scroll.
+    function initCarouselDots() {
+        document.querySelectorAll('.carousel-container').forEach(cont => {
+            const items = cont.querySelectorAll('.carousel-item');
+            if (items.length < 2 || cont.dataset.dots) return;
+            cont.dataset.dots = '1';
+            const dots = document.createElement('div');
+            dots.className = 'carousel-dots';
+            items.forEach((_, i) => { const d = document.createElement('div'); d.className = 'dot' + (i === 0 ? ' active' : ''); dots.appendChild(d); });
+            cont.after(dots);
+            cont.addEventListener('scroll', () => {
+                const idx = Math.round(cont.scrollLeft / cont.clientWidth);
+                dots.querySelectorAll('.dot').forEach((d, i) => d.classList.toggle('active', i === idx));
+            }, { passive: true });
+        });
+    }
+
+    async function verificarClave() {
+        const clave = document.getElementById('input-pass').value.trim();
+        const errEl = document.getElementById('error-pass');
+        const btn = document.getElementById('btn-entrar');
+        errEl.classList.add('hidden');
+        if (!clave) return;
+        btn.disabled = true; btn.innerText = "VERIFICANDO...";
+        try {
+            // Login real contra Firebase Auth. La persistencia por defecto
+            // mantiene la sesion en este dispositivo (no pide clave cada vez).
+            await signInWithEmailAndPassword(auth, ADMIN_EMAIL, clave);
+            // onAuthStateChanged se encarga de mostrar el panel.
+        } catch (e) {
+            errEl.classList.remove('hidden');
+        } finally {
+            btn.disabled = false; btn.innerText = "INGRESAR";
+            document.getElementById('input-pass').value = "";
+        }
+    }
+
+    // Pinta la tarjeta "Hoy". Si la jornada esta abierta usa los datos en vivo;
+    // si ya cerro, muestra los totales del cierre de hoy (en vez de 0). No afecta acumulados.
+    function actualizarHoy() {
+        const abierta = dataHoy.total > 0 || dataHoy.autos > 0;
+        const src = abierta ? dataHoy : (cierreHoy || dataHoy);
+        animateNum('total-hoy', src.total, true);
+        animateNum('cant-hoy', src.autos, false);
+        document.getElementById('sub-pases').innerText = num(src.pases).toLocaleString('es-CL');
+        document.getElementById('sub-minutos').innerText = num(src.minutos).toLocaleString('es-CL');
+        document.getElementById('ef-hoy').innerText = fmt(src.ef);
+        document.getElementById('tj-hoy').innerText = fmt(src.tj);
+        renderPie('chartPagosHoy', [src.ef, src.tj]);
+        const sinc = document.getElementById('hora-sincro');
+        if (abierta) sinc.innerText = `Sync: ${new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })}`;
+        else if (cierreHoy) sinc.innerText = '✓ Jornada cerrada';
+        else sinc.innerText = 'Sin movimiento hoy';
+    }
+
+    // Pinta los acumulados mes/anio combinando el historico con la jornada de hoy en vivo.
+    function pintarAcumulados() {
+        animateNum('total-mes', acum.M + dataHoy.total, true);
+        animateNum('total-anio', acum.A + dataHoy.total, true);
+        animateNum('cant-mes', acum.autM + dataHoy.autos, false);
+        animateNum('cant-anio', acum.autA + dataHoy.autos, false);
+        document.getElementById('ef-mes').innerText = fmt(acum.efM + dataHoy.ef);
+        document.getElementById('tj-mes').innerText = fmt(acum.tjM + dataHoy.tj);
+        renderPie('chartPagosMes', [acum.efM + dataHoy.ef, acum.tjM + dataHoy.tj]);
+    }
+
+    function iniciarEscuchas() {
+        const hoy = new Date();
+        const fechaDoc = `${String(hoy.getDate()).padStart(2, '0')}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${hoy.getFullYear()}`;
+
+        onSnapshot(doc(db, "admin_stats", fechaDoc), (ds) => {
+            if (ds.exists()) {
+                const d = ds.data();
+                dataHoy = { total: num(d.total_hoy), autos: num(d.total_autos), ef: num(d.efectivo), tj: num(d.tarjeta), pases: num(d.cant_pases), minutos: num(d.cant_minutos) };
+                makitoHoy = Object.assign({ total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 }, d.makito || {});
+                document.getElementById('fecha-actual').innerText = d.fecha_dato || fechaDoc;
+                try { renderHoraPunta(d.por_hora); } catch (e) { console.error('horapunta:', e); }
+            } else {
+                dataHoy = { total: 0, autos: 0, ef: 0, tj: 0, pases: 0, minutos: 0 };
+                makitoHoy = { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+                document.getElementById('fecha-actual').innerText = fechaDoc;
+            }
+            actualizarHoy();
+            pintarAcumulados();
+            try { renderMakito(); } catch (e) { console.error('makito:', e); }
+        });
+
+        const q = query(collection(db, "historico_cierres"), orderBy("timestamp_cierre", "desc"));
+        onSnapshot(q, (snap) => {
+            let html = "", acumM = 0, acumA = 0, autM = 0, autA = 0, efM = 0, tjM = 0;
+            let histD = {}, histM = new Array(12).fill(0);
+            let histMPrev = new Array(12).fill(0), prevMeses = new Set();
+            let mkM = { total:0, ganancia:0, ef:0, tj:0, und:0 }, mkA = { total:0, ganancia:0, ef:0, tj:0, und:0 };
+            cierresData = [];
+            todosLosCierres = [];
+            cierreHoy = null;
+            makitoCierreHoy = null;
+
+            snap.forEach(docSnap => {
+                const d = docSnap.data();
+                const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
+                const totalDia = num(d.total_recaudado);
+                const pasesDia = num(d.cant_pases), minutosDia = num(d.cant_minutos);
+                const autosDia = pasesDia + minutosDia;
+                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia, evadidos: num(d.cant_evadidos), montoEvadido: num(d.monto_evadido_estimado) });
+                const mk = d.makito || { total: num(d.total_makito), ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+                if (f.getFullYear() === hoy.getFullYear() && f.getMonth() === hoy.getMonth() && f.getDate() === hoy.getDate()) {
+                    cierreHoy = { total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia };
+                    makitoCierreHoy = { total: num(mk.total), ganancia: num(mk.ganancia), efectivo: num(mk.efectivo), tarjeta: num(mk.tarjeta), unidades: num(mk.unidades) };
+                }
+                if (f.getFullYear() === anioActual) {
+                    acumA += totalDia; autA += autosDia;
+                    histM[f.getMonth()] += totalDia;
+                    mkA.total += num(mk.total); mkA.ganancia += num(mk.ganancia); mkA.ef += num(mk.efectivo); mkA.tj += num(mk.tarjeta); mkA.und += num(mk.unidades);
+                    if (f.getMonth() === hoy.getMonth()) {
+                        acumM += totalDia; autM += autosDia;
+                        efM += num(d.efectivo); tjM += num(d.tarjeta);
+                        histD[f.getDate()] = totalDia;
+                        mkM.total += num(mk.total); mkM.ganancia += num(mk.ganancia); mkM.ef += num(mk.efectivo); mkM.tj += num(mk.tarjeta); mkM.und += num(mk.unidades);
+                    }
+                } else if (f.getFullYear() === anioActual - 1) {
+                    histMPrev[f.getMonth()] += totalDia;
+                    prevMeses.add(f.getMonth());
+                }
+                const idx = cierresData.push(d) - 1;   // guardamos el objeto y pasamos su indice
+                html += `<div onclick="abrirModal(${idx})" class="flex justify-between items-center glass p-3 mb-2 active:scale-95 transition-all">
+                    <div><span class="font-bold text-sm text-white">${d.fecha || '--'}</span><br><span class="text-[8px] text-[#00E0D0] font-bold">DETALLE</span></div>
+                    <div class="text-right"><span class="font-black text-[#00C853] text-sm">${fmt(totalDia)}</span></div>
+                </div>`;
+            });
+
+            acum = { M: acumM, A: acumA, autM, autA, efM, tjM };
+            makitoAcum = { M: mkM, A: mkA };
+            pintarAcumulados();
+            actualizarHoy();  // por si el cierre de hoy acaba de aparecer
+            document.getElementById('lista-cierres').innerHTML = html || "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
+
+            renderLine(histD);
+            renderBar(histM, histMPrev.map((v, i) => prevMeses.has(i) ? v : null));
+            try { renderComparador(); renderPredictivo(); renderFeriados(); renderTendencias(); renderEvasion(); renderMakito(); } catch (e) { console.error('analytics:', e); }
+        });
+
+        // Catálogo Makito (espejo que sube la caja) + cola de cambios del teléfono
+        onSnapshot(doc(db, "makito_catalogo", "catalogo"), (ds) => {
+            makitoCatalogo = ds.exists() ? (ds.data().productos || []) : [];
+            try { gmRenderCatalogo(); } catch (e) {}
+            try { renderInventario(); } catch (e) {}
+        }, (err) => console.error('makito_catalogo (¿reglas publicadas?):', err));
+        onSnapshot(collection(db, "makito_cambios"), (snap) => {
+            makitoCambios = snap.docs.map(d => d.data());
+            makitoCambios.sort((a, b) => String(b.ts || '').localeCompare(String(a.ts || '')));
+            try { gmRenderPendientes(); } catch (e) {}
+        }, (err) => console.error('makito_cambios (¿reglas publicadas?):', err));
+    }
+
+    // Grafico de hora punta (ingresos por hora). Se activa solo cuando la caja
+    // sube el campo por_hora en admin_stats (parche v14.1 del Python).
+    function renderHoraPunta(porHora) {
+        const vacio = document.getElementById('horapunta-vacio');
+        const canvas = document.getElementById('chartHoy');
+        if (!porHora || !Object.keys(porHora).length) return;
+        vacio.style.display = 'none';
+        canvas.style.display = 'block';
+        const horas = Object.keys(porHora).sort();
+        const data = horas.map(h => num(porHora[h]));
+        const maxV = Math.max(...data);
+        if (charts.hoy) charts.hoy.destroy();
+        charts.hoy = new Chart(canvas, {
+            type: 'bar',
+            data: { labels: horas.map(h => `${h}h`), datasets: [{ data, backgroundColor: data.map(v => v === maxV ? '#F87171' : '#00E0D0'), borderRadius: 4 }] },
+            options: { plugins: { legend: { display: false } }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 8 } } } } }
+        });
+    }
+
+    function renderPie(id, data) {
+        if (charts[id]) charts[id].destroy();
+        charts[id] = new Chart(document.getElementById(id), {
+            type: 'doughnut',
+            data: { datasets: [{ data: data[0]+data[1] === 0 ? [1,0] : data, backgroundColor: ['#00C853','#00E0D0'], borderWidth: 0 }] },
+            options: { cutout: '75%', plugins: { legend: { display: false } } }
+        });
+    }
+
+    function renderLine(dict) {
+        const ctx = document.getElementById('chartMensual');
+        const labels = Array.from({length:31},(_,i)=>i+1);
+        const data = labels.map(d => dict[d]||0);
+        if (charts.line) charts.line.destroy();
+        charts.line = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets: [{ data, borderColor: '#00E0D0', tension: 0.4, fill: true, backgroundColor: 'rgba(0,224,208,0.05)' }] },
+            options: { plugins: { legend: false }, scales: { y: { display: false }, x: { ticks: { color: '#6B7280', font: { size: 8 } } } } }
+        });
+    }
+
+    function renderBar(arr, arrPrev) {
+        if (charts.bar) charts.bar.destroy();
+        const hayPrev = arrPrev && arrPrev.some(v => v != null && v > 0);
+        const datasets = [{ type: 'bar', label: String(anioActual), data: arr, backgroundColor: '#FFD700', borderRadius: 4, order: 2 }];
+        if (hayPrev) {
+            datasets.unshift({
+                type: 'line', label: String(anioActual - 1), data: arrPrev,
+                borderColor: '#00E0D0', borderWidth: 2, tension: 0.35, pointRadius: 2,
+                fill: false, spanGaps: false, order: 1
+            });
+        }
+        charts.bar = new Chart(document.getElementById('chartAnual'), {
+            type: 'bar',
+            data: { labels: ['E','F','M','A','M','J','J','A','S','O','N','D'], datasets },
+            options: {
+                plugins: { legend: hayPrev ? { display: true, labels: { color: '#9CA3AF', font: { size: 9 }, boxWidth: 10, padding: 8 } } : { display: false } },
+                scales: { y: { display: false } }
+            }
+        });
+    }
+
+    // ---------- COMPARADOR (dia / mes / anio) ----------
+    const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+
+    // Agrupa los cierres segun el modo activo. Devuelve periodos en orden
+    // (mas reciente primero, heredado del orden de todosLosCierres).
+    function compPeriodos() {
+        if (compModo === 'dia') {
+            return todosLosCierres.map((c, i) => ({ value: 'd' + i, label: c.fecha || c.date.toLocaleDateString('es-CL'), cierres: [c] }));
+        }
+        const map = new Map();
+        todosLosCierres.forEach(c => {
+            const key = compModo === 'mes' ? `${c.date.getFullYear()}-${c.date.getMonth()}` : `${c.date.getFullYear()}`;
+            const label = compModo === 'mes' ? `${MESES[c.date.getMonth()]} ${c.date.getFullYear()}` : `${c.date.getFullYear()}`;
+            if (!map.has(key)) map.set(key, { value: key, label, cierres: [] });
+            map.get(key).cierres.push(c);
+        });
+        return [...map.values()];
+    }
+
+    function compAgregar(cierres) {
+        return cierres.reduce((a, c) => ({
+            total: a.total + c.total, autos: a.autos + c.autos,
+            ef: a.ef + c.ef, tj: a.tj + c.tj, dias: a.dias + 1
+        }), { total: 0, autos: 0, ef: 0, tj: 0, dias: 0 });
+    }
+
+    // Helpers de fecha para el modo Dia (calendario nativo)
+    const isoKey = (dte) => `${dte.getFullYear()}-${String(dte.getMonth() + 1).padStart(2, '0')}-${String(dte.getDate()).padStart(2, '0')}`;
+    const cierreDeFechaISO = (iso) => iso ? (todosLosCierres.find(c => isoKey(c.date) === iso) || null) : null;
+    const fechaCortaISO = (iso) => { if (!iso) return '—'; const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+
+    function compToggleUI() {
+        const esDia = compModo === 'dia';
+        document.getElementById('comp-selects').style.display = esDia ? 'none' : 'flex';
+        document.getElementById('comp-dates').style.display = esDia ? 'flex' : 'none';
+    }
+
+    function compLlenarSelectores() {
+        if (compModo === 'dia') {
+            if (!todosLosCierres.length) return;
+            const fechas = todosLosCierres.map(c => c.date).slice().sort((a, b) => a - b);
+            const min = isoKey(fechas[0]), max = isoKey(fechas[fechas.length - 1]);
+            const da = document.getElementById('comp-a-date'), dbb = document.getElementById('comp-b-date');
+            da.min = min; da.max = max; dbb.min = min; dbb.max = max;
+            // Por defecto: A = dia mas reciente, B = el anterior. No pisa lo que el usuario ya eligio.
+            if (!da.value) da.value = isoKey(todosLosCierres[0].date);
+            if (!dbb.value) dbb.value = isoKey((todosLosCierres[1] || todosLosCierres[0]).date);
+            return;
+        }
+        const periodos = compPeriodos();
+        const selA = document.getElementById('comp-a');
+        const selB = document.getElementById('comp-b');
+        const prevA = selA.value, prevB = selB.value;
+        const opts = periodos.map(p => `<option value="${p.value}">${p.label}</option>`).join('');
+        selA.innerHTML = opts; selB.innerHTML = opts;
+        if (periodos.length) {
+            selA.value = periodos.some(p => p.value === prevA) ? prevA : periodos[0].value;
+            selB.value = periodos.some(p => p.value === prevB) ? prevB : (periodos[1] || periodos[0]).value;
+        }
+    }
+
+    // Devuelve {A:{label,cierres}, B:{label,cierres}} segun el modo activo.
+    function getSeleccion() {
+        if (compModo === 'dia') {
+            const va = document.getElementById('comp-a-date').value;
+            const vb = document.getElementById('comp-b-date').value;
+            const ca = cierreDeFechaISO(va), cb = cierreDeFechaISO(vb);
+            return {
+                A: { label: fechaCortaISO(va), cierres: ca ? [ca] : [], vacio: !ca },
+                B: { label: fechaCortaISO(vb), cierres: cb ? [cb] : [], vacio: !cb }
+            };
+        }
+        const periodos = compPeriodos();
+        if (!periodos.length) return null;
+        const pa = periodos.find(p => p.value === document.getElementById('comp-a').value) || periodos[0];
+        const pb = periodos.find(p => p.value === document.getElementById('comp-b').value) || periodos[Math.min(1, periodos.length - 1)];
+        return { A: pa, B: pb };
+    }
+
+    function compFila(label, a, b, moneda = true) {
+        const f = moneda ? fmt : (x) => num(x).toLocaleString('es-CL');
+        let delta = '<span class="text-[9px] text-gray-600 block">—</span>';
+        if (b > 0) {
+            const pct = (a - b) / b * 100;
+            const col = pct > 0 ? '#00C853' : (pct < 0 ? '#F87171' : '#6B7280');
+            const fl = pct > 0 ? '▲' : (pct < 0 ? '▼' : '–');
+            delta = `<span style="color:${col}" class="text-[9px] font-black block">${fl} ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+        } else if (a > 0 && compModo !== 'dia') {
+            delta = '<span class="text-[9px] font-black text-[#00C853] block">nuevo</span>';
+        }
+        // El delta describe a la columna A respecto de B, por eso va DEBAJO de A.
+        return `<div class="grid grid-cols-3 items-center py-2 border-b border-white/5">
+            <span class="text-[9px] text-gray-400 font-bold uppercase">${label}</span>
+            <div class="text-center"><span class="text-sm font-black text-white">${f(a)}</span>${delta}</div>
+            <span class="text-right text-sm font-bold text-gray-300">${f(b)}</span>
+        </div>`;
+    }
+
+    function compRender() {
+        const cont = document.getElementById('comp-resultado');
+        const sel = getSeleccion();
+        if (!sel) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos suficientes.</p>";
+            return;
+        }
+        if (compModo === 'dia' && sel.A.vacio && sel.B.vacio) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>No hay cierres registrados en esas fechas.</p>";
+            return;
+        }
+        const A = compAgregar(sel.A.cierres), B = compAgregar(sel.B.cierres);
+        const tickA = A.autos ? A.total / A.autos : 0;
+        const tickB = B.autos ? B.total / B.autos : 0;
+        let titulo = '';
+        if (B.total > 0) {
+            const pct = (A.total - B.total) / B.total * 100;
+            const col = pct >= 0 ? '#00C853' : '#F87171';
+            titulo = `<div class="text-center mb-3"><span class="text-2xl font-black" style="color:${col}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</span><p class="text-[9px] text-gray-400 uppercase font-bold">recaudación · ${sel.A.label} vs ${sel.B.label}</p></div>`;
+        }
+        cont.innerHTML = titulo + `
+            <div class="grid grid-cols-3 mb-1">
+                <span></span>
+                <span class="text-center text-[9px] font-black text-[#00E0D0] uppercase truncate px-1">${sel.A.label}</span>
+                <span class="text-right text-[9px] font-black text-[#FFD700] uppercase truncate px-1">${sel.B.label}</span>
+            </div>
+            ${compFila('Recaudación', A.total, B.total)}
+            ${compFila('Autos', A.autos, B.autos, false)}
+            ${compFila('Ticket prom.', Math.round(tickA), Math.round(tickB))}
+            ${compFila('Efectivo', A.ef, B.ef)}
+            ${compFila('Tarjeta', A.tj, B.tj)}
+            ${compModo !== 'dia' ? compFila('Días con datos', A.dias, B.dias, false) : ''}
+        `;
+    }
+
+    function renderComparador() {
+        compToggleUI();
+        compLlenarSelectores();
+        compRender();
+    }
+
+    // ---------- PREDICTIVO ----------
+    // Por cada dia de la semana (0=Dom..6=Sab) mira las ultimas K ocurrencias
+    // de CALENDARIO (haya habido cierre o no) y devuelve:
+    //  - rate: frecuencia real de apertura (0..1) en esa ventana
+    //  - total/autos/...: promedio ponderado SOLO de los dias trabajados
+    // Asi un martes de invierno (sin aperturas recientes) proyecta ~0 aunque
+    // en enero/febrero se haya trabajado entre semana.
+    function statsPorDiaSemana() {
+        const K = 8;        // ~2 meses hacia atras por dia de semana
+        const decay = 0.85; // mas peso a lo reciente
+        const key = (dt) => dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate();
+        const porFecha = new Map(todosLosCierres.map(c => [key(c.date), c]));
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const primera = new Date(todosLosCierres.length ? todosLosCierres[todosLosCierres.length - 1].date : hoy);
+        primera.setHours(0, 0, 0, 0);
+        return Array.from({ length: 7 }, (_, wd) => {
+            // ultima ocurrencia de este dia de semana ANTERIOR a hoy (hoy queda fuera: dia incompleto)
+            const d = new Date(hoy);
+            d.setDate(d.getDate() - (((hoy.getDay() - wd + 7) % 7) || 7));
+            const abiertos = [];
+            let n = 0;
+            while (n < K && d >= primera) {
+                n++;
+                const c = porFecha.get(key(d));
+                if (c) abiertos.push(c); // queda ordenado mas reciente primero
+                d.setDate(d.getDate() - 7);
+            }
+            const rate = n ? abiertos.length / n : 0;
+            if (!abiertos.length) return { rate: 0, total: 0, autos: 0, pases: 0, minutos: 0, n, nAb: 0 };
+            let sw = 0, st = 0, sa = 0, sp = 0, sm = 0;
+            abiertos.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
+            return { rate, total: st / sw, autos: sa / sw, pases: sp / sw, minutos: sm / sw, n, nAb: abiertos.length };
+        });
+    }
+
+    function renderPredictivo() {
+        const cont = document.getElementById('pred-contenido');
+        if (todosLosCierres.length < 7) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Necesito más historial para proyectar.</p>";
+            return;
+        }
+        const w = statsPorDiaSemana();
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+
+        // Proximo fin de semana: monto SI SE ABRE (el clima lo decides tu).
+        const diasASab = (6 - hoy.getDay() + 7) % 7;
+        const sab = new Date(hoy.getTime() + diasASab * 86400000);
+        const dom = new Date(sab.getTime() + 86400000);
+        const pSab = w[6], pDom = w[0];
+        const totFde = pSab.total + pDom.total;
+
+        // Proximo mes: valor ESPERADO por dia = promedio x frecuencia de
+        // apertura reciente. Un martes que no se abre hace 8 semanas aporta 0.
+        const mesNM = (hoy.getMonth() + 1) % 12;
+        const anioNM = hoy.getMonth() === 11 ? hoy.getFullYear() + 1 : hoy.getFullYear();
+        const diasMes = new Date(anioNM, mesNM + 1, 0).getDate();
+        let totMes = 0, autosMes = 0, pasesMes = 0, minutosMes = 0, diasApertura = 0;
+        for (let dd = 1; dd <= diasMes; dd++) {
+            const s = w[new Date(anioNM, mesNM, dd).getDay()];
+            totMes += s.rate * s.total; autosMes += s.rate * s.autos;
+            pasesMes += s.rate * s.pases; minutosMes += s.rate * s.minutos;
+            diasApertura += s.rate;
+        }
+        // Enero/febrero se trabaja casi a diario: la frecuencia de invierno subestima.
+        const avisoTemporada = (mesNM === 0 || mesNM === 1)
+            ? `<p class="text-[9px] text-[#FFD700] mt-1">⚠ Mes de temporada alta: puede quedar subestimado (se basa en la frecuencia de apertura reciente).</p>` : '';
+
+        // Desglose estimado pase diario vs por minuto (% y numero de autos)
+        const splitLine = (pases, minutos) => {
+            const p = Math.round(pases), m = Math.round(minutos), tot = p + m;
+            const pp = tot ? Math.round(p / tot * 100) : 0, pm = tot ? 100 - pp : 0;
+            return `<div class="flex gap-2 mt-2">
+                <div class="flex-1 bg-white/5 rounded-lg p-2 border-l-4 border-[#FFD700]"><p class="text-[8px] text-gray-400 font-black uppercase">Pase diario</p><p class="text-sm font-black text-white">${p} <span class="text-[10px] text-gray-500">${pp}%</span></p></div>
+                <div class="flex-1 bg-white/5 rounded-lg p-2 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 font-black uppercase">Por minuto</p><p class="text-sm font-black text-white">${m} <span class="text-[10px] text-gray-500">${pm}%</span></p></div>
+            </div>`;
+        };
+
+        // Confianza: segun cuantas muestras reales hay del dia de semana
+        // (solo dias que si se abren) con menos datos
+        const ns = w.filter(x => x.nAb > 0).map(x => x.nAb);
+        const minN = ns.length ? Math.min(...ns) : 0;
+        const conf = minN >= 6 ? { t: 'Alta', c: '#00C853' } : (minN >= 3 ? { t: 'Media', c: '#FFD700' } : { t: 'Baja', c: '#F87171' });
+        const ddmm = (dte) => `${String(dte.getDate()).padStart(2, '0')}/${String(dte.getMonth() + 1).padStart(2, '0')}`;
+
+        cont.innerHTML = `
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo fin de semana</p>
+                <p class="text-3xl font-black text-[#00E0D0]">${fmt(totFde)}</p>
+                <div class="mt-2 space-y-1">
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Sáb ${ddmm(sab)}</span><span><b class="text-white">${fmt(pSab.total)}</b> <span class="text-gray-500">· ${Math.round(pSab.autos)} autos</span></span></div>
+                    <div class="flex justify-between text-xs"><span class="text-gray-400">Dom ${ddmm(dom)}</span><span><b class="text-white">${fmt(pDom.total)}</b> <span class="text-gray-500">· ${Math.round(pDom.autos)} autos</span></span></div>
+                </div>
+                ${splitLine(pSab.pases + pDom.pases, pSab.minutos + pDom.minutos)}
+            </div>
+            <div class="border-t border-white/10 pt-3">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo mes · ${MESES[mesNM]} ${anioNM}</p>
+                <p class="text-3xl font-black text-[#FFD700]">${fmt(totMes)}</p>
+                <p class="text-xs text-gray-400 mt-1">≈ ${Math.round(autosMes).toLocaleString('es-CL')} autos · ${Math.round(diasApertura)} días de apertura estimados</p>
+                ${avisoTemporada}
+                ${splitLine(pasesMes, minutosMes)}
+            </div>
+            <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
+                <span class="text-[9px] text-gray-500 italic">Según tu patrón y frecuencia de apertura recientes (~8 sem.) · no considera feriados · referencial</span>
+                <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
+            </div>
+        `;
+    }
+
+    // ---------- FERIADOS CHILE / FINDES LARGOS ----------
+    // Feriados calculados por ley: fijos + Semana Santa (computus de Meeus)
+    // + ley de lunes (19.668) + evangelicas (20.299) + puentes de Fiestas
+    // Patrias (20.215) y Año Nuevo (20.983). Funciona para cualquier año.
+    // NO incluye feriados extraordinarios (elecciones, censos) ni regionales.
+    function feriadosDelAnio(y) {
+        const D = (m, d) => new Date(y, m - 1, d);
+        // Domingo de Pascua
+        const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+        const d1 = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25);
+        const g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d1 - g + 15) % 30;
+        const i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7;
+        const m = Math.floor((a + 11 * h + 22 * l) / 451);
+        const pascua = new Date(y, Math.floor((h + l - 7 * m + 114) / 31) - 1, ((h + l - 7 * m + 114) % 31) + 1);
+        const viernesSanto = new Date(pascua); viernesSanto.setDate(pascua.getDate() - 2);
+        const sabadoSanto = new Date(pascua); sabadoSanto.setDate(pascua.getDate() - 1);
+        // Ley de lunes: mar/mie/jue -> lunes anterior; vie -> lunes siguiente
+        const leyLunes = (dt) => {
+            const wd = dt.getDay(), r = new Date(dt);
+            if (wd >= 2 && wd <= 4) r.setDate(r.getDate() - (wd - 1));
+            else if (wd === 5) r.setDate(r.getDate() + 3);
+            return r;
+        };
+        // Evangelicas: si 31 oct cae martes -> viernes anterior; miercoles -> viernes siguiente
+        const evang = D(10, 31);
+        if (evang.getDay() === 2) evang.setDate(evang.getDate() - 4);
+        else if (evang.getDay() === 3) evang.setDate(evang.getDate() + 2);
+        // Pueblos indigenas = solsticio de invierno (fecha por decreto)
+        const solsticio = { 2024: 20, 2025: 20, 2026: 21, 2027: 21, 2028: 20, 2029: 20, 2030: 21 }[y] || 21;
+        const lista = [
+            [D(1, 1), 'Año Nuevo'],
+            [viernesSanto, 'Viernes Santo'],
+            [sabadoSanto, 'Sábado Santo'],
+            [D(5, 1), 'Día del Trabajo'],
+            [D(5, 21), 'Glorias Navales'],
+            [D(6, solsticio), 'Pueblos Indígenas'],
+            [leyLunes(D(6, 29)), 'San Pedro y San Pablo'],
+            [D(7, 16), 'Virgen del Carmen'],
+            [D(8, 15), 'Asunción de la Virgen'],
+            [D(9, 18), 'Independencia'],
+            [D(9, 19), 'Glorias del Ejército'],
+            [leyLunes(D(10, 12)), 'Encuentro de Dos Mundos'],
+            [evang, 'Iglesias Evangélicas'],
+            [D(11, 1), 'Todos los Santos'],
+            [D(12, 8), 'Inmaculada Concepción'],
+            [D(12, 25), 'Navidad'],
+        ];
+        const wd18 = D(9, 18).getDay();
+        if (wd18 === 2) lista.push([D(9, 17), 'Fiestas Patrias (puente)']);
+        if (wd18 === 3) lista.push([D(9, 20), 'Fiestas Patrias (puente)']);
+        if (D(1, 1).getDay() === 0) lista.push([D(1, 2), 'Puente Año Nuevo']);
+        return lista.map(([date, nombre]) => { date.setHours(0, 0, 0, 0); return { date, nombre }; })
+            .sort((x, z) => x.date - z.date);
+    }
+
+    function renderFeriados() {
+        const cont = document.getElementById('feriados-contenido');
+        if (!cont) return;
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const anio = hoy.getFullYear();
+        const keyD = (dt) => dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate();
+        const fers = [...feriadosDelAnio(anio), ...feriadosDelAnio(anio + 1)];
+        const ferMap = new Map(fers.map(f => [keyD(f.date), f]));
+        const esLibre = (dt) => dt.getDay() === 0 || dt.getDay() === 6 || ferMap.has(keyD(dt));
+
+        // Bloques de dias libres consecutivos (finde + feriados pegados).
+        // Parte 3 dias atras por si hay un finde largo EN CURSO.
+        const bloques = [];
+        const cursor = new Date(hoy); cursor.setDate(cursor.getDate() - 3);
+        const horizonte = new Date(anio + 1, 11, 31);
+        let run = null;
+        while (cursor <= horizonte) {
+            if (esLibre(cursor)) {
+                if (!run) run = { ini: new Date(cursor), dias: 0, nombres: [] };
+                run.dias++;
+                const fx = ferMap.get(keyD(cursor));
+                if (fx) run.nombres.push(fx.nombre);
+                run.hasta = new Date(cursor);
+            } else if (run) { bloques.push(run); run = null; }
+            cursor.setDate(cursor.getDate() + 1);
+        }
+        if (run) bloques.push(run);
+        // Finde largo = 3+ dias libres seguidos con al menos un feriado
+        const largos = bloques.filter(b => b.dias >= 3 && b.nombres.length && b.hasta >= hoy);
+
+        const DSEM = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        const MC = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+        const fCorta = (dt) => `${DSEM[dt.getDay()]} ${dt.getDate()} ${MC[dt.getMonth()]}`;
+
+        const prox = largos[0];
+        let destacado = '';
+        if (prox) {
+            const enCurso = prox.ini <= hoy;
+            const enDias = Math.round((prox.ini - hoy) / 86400000);
+            destacado = `<div class="bg-white/5 rounded-xl p-3 mb-4 border-l-4 border-[#FFD700]">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">⭐ Próximo finde largo ${enCurso ? '· ¡en curso!' : `· en ${enDias} días`}</p>
+                <p class="text-xl font-black text-[#FFD700] mt-1">${prox.dias} días <span class="text-sm text-white font-bold">· ${fCorta(prox.ini)} → ${fCorta(prox.hasta)}</span></p>
+                <p class="text-[10px] text-gray-400 mt-1">${prox.nombres.join(' + ')}</p>
+            </div>`;
+        }
+
+        // Feriados restantes del año (si quedan pocos, asoma el proximo año)
+        let lista = fers.filter(fx => fx.date >= hoy && fx.date.getFullYear() === anio);
+        if (lista.length < 3) lista = fers.filter(fx => fx.date >= hoy).slice(0, 6);
+        const enLargo = (fx) => largos.some(b => fx.date >= b.ini && fx.date <= b.hasta);
+
+        // Lo que se recaudo ese MISMO feriado el año pasado (match por nombre,
+        // asi la ley de lunes no desalinea las fechas). Click -> detalle.
+        const prevPorNombre = new Map(feriadosDelAnio(anio - 1).map(fx => [fx.nombre, fx.date]));
+        const idxPorFecha = new Map(todosLosCierres.map((c, ix) => [keyD(c.date), ix]));
+
+        const filas = lista.map(fx => {
+            const dPrev = prevPorNombre.get(fx.nombre);
+            const idx = dPrev !== undefined ? idxPorFecha.get(keyD(dPrev)) : undefined;
+            const prev = idx !== undefined
+                ? `<span class="text-[9px] text-[#00C853] font-black cursor-pointer" onclick="abrirModal(${idx})">${anio - 1}: ${fmt(todosLosCierres[idx].total)}</span>`
+                : `<span class="text-[9px] text-gray-600">${anio - 1}: s/d</span>`;
+            return `<div class="flex items-center justify-between py-2 border-b border-white/5">
+                <div>
+                    <p class="text-xs font-bold text-white">${fCorta(fx.date)}${fx.date.getFullYear() !== anio ? ` <span class="text-gray-500">'${String(fx.date.getFullYear()).slice(2)}</span>` : ''}</p>
+                    <p class="text-[9px] text-gray-400">${fx.nombre}</p>
+                </div>
+                <div class="text-right">
+                    ${enLargo(fx) ? '<span class="text-[8px] bg-[#FFD700]/15 text-[#FFD700] font-black uppercase px-2 py-0.5 rounded-full">finde largo</span><br>' : ''}
+                    ${prev}
+                </div>
+            </div>`;
+        }).join('');
+
+        const quedanLargos = largos.filter(b => b.ini.getFullYear() === anio).length;
+        cont.innerHTML = destacado + `
+            <div class="flex justify-between items-center mb-2">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Feriados que vienen</p>
+                <p class="text-[9px] text-gray-500">${quedanLargos} findes largos más en ${anio}</p>
+            </div>
+            ${filas || "<p class='text-gray-500 italic text-center text-xs'>Sin feriados próximos.</p>"}
+            <p class="text-[9px] text-gray-600 italic mt-3">Calculados por ley (incl. ley de lunes) · no incluye feriados extraordinarios (ej. elecciones)</p>`;
+    }
+
+    // ---------- TENDENCIAS / RANKINGS ----------
+    function renderTendencias() {
+        const cont = document.getElementById('tend-contenido');
+        if (!todosLosCierres.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
+            return;
+        }
+        const DIAS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+        const buckets = Array.from({ length: 7 }, () => ({ sum: 0, n: 0 }));
+        let totG = 0, autosG = 0, efG = 0, tjG = 0;
+        todosLosCierres.forEach(c => {
+            const b = buckets[c.date.getDay()]; b.sum += c.total; b.n++;
+            totG += c.total; autosG += c.autos; efG += c.ef; tjG += c.tj;
+        });
+        const ranking = buckets.map((b, i) => ({ dia: DIAS[i], avg: b.n ? b.sum / b.n : 0, n: b.n }))
+            .filter(x => x.n > 0).sort((a, b) => b.avg - a.avg);
+        const maxAvg = ranking.length ? ranking[0].avg : 1;
+
+        // Crecimiento: ultimos 30 dias vs los 30 previos
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const D30 = 30 * 86400000;
+        let win1 = 0, win2 = 0;
+        todosLosCierres.forEach(c => {
+            const diff = hoy - c.date;
+            if (diff >= 0 && diff < D30) win1 += c.total;
+            else if (diff >= D30 && diff < 2 * D30) win2 += c.total;
+        });
+        const growth = win2 > 0 ? (win1 - win2) / win2 * 100 : null;
+
+        // Dias record (top 5). Los indices estan alineados con cierresData -> abrirModal.
+        const records = [...todosLosCierres.entries()].sort((a, b) => b[1].total - a[1].total).slice(0, 5);
+
+        const ticketG = autosG ? totG / autosG : 0;
+        const pctTarjeta = (efG + tjG) > 0 ? tjG / (efG + tjG) * 100 : 0;
+
+        const rankHtml = ranking.map((r, i) => `
+            <div class="flex items-center gap-2 py-1">
+                <span class="text-[10px] w-16 ${i === 0 ? 'text-[#00E0D0] font-black' : 'text-gray-400 font-bold'}">${i === 0 ? '🏆 ' : ''}${r.dia}</span>
+                <div class="flex-1 bg-white/5 rounded-full h-2 overflow-hidden"><div class="h-full rounded-full" style="width:${(r.avg / maxAvg * 100).toFixed(0)}%;background:${i === 0 ? '#00E0D0' : '#2C5170'}"></div></div>
+                <span class="text-[10px] font-bold text-white w-20 text-right">${fmt(r.avg)}</span>
+            </div>`).join('');
+
+        const recHtml = records.map(([idx, c], i) => `
+            <div onclick="abrirModal(${idx})" class="flex justify-between items-center py-1.5 active:scale-95 transition-all cursor-pointer">
+                <span class="text-xs text-gray-300"><span class="text-gray-500 font-black">${i + 1}.</span> ${c.fecha || c.date.toLocaleDateString('es-CL')}</span>
+                <span class="text-xs font-black text-[#00C853]">${fmt(c.total)}</span>
+            </div>`).join('');
+
+        let growthHtml = '';
+        if (growth !== null) {
+            const col = growth >= 0 ? '#00C853' : '#F87171';
+            const fl = growth >= 0 ? '▲' : '▼';
+            growthHtml = `
+                <div class="mb-4">
+                    <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Crecimiento · últimos 30 días</p>
+                    <span class="text-3xl font-black" style="color:${col}">${fl} ${growth >= 0 ? '+' : ''}${growth.toFixed(1)}%</span>
+                    <p class="text-[10px] text-gray-500 mt-1">${fmt(win1)} vs ${fmt(win2)} (30 días previos)</p>
+                </div>`;
+        }
+
+        cont.innerHTML = `
+            ${growthHtml}
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-2">Ranking por día (promedio)</p>
+                ${rankHtml}
+            </div>
+            <div class="mb-3 border-t border-white/10 pt-3">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Días récord · toca para detalle</p>
+                ${recHtml}
+            </div>
+            <div class="grid grid-cols-2 gap-3 border-t border-white/10 pt-3">
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Ticket promedio</p><p class="text-lg font-black text-white">${fmt(ticketG)}</p></div>
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">% Tarjeta</p><p class="text-lg font-black text-[#00E0D0]">${pctTarjeta.toFixed(0)}%</p></div>
+            </div>
+        `;
+    }
+
+    // ---------- EVASION / CONTROL DE MERMA ----------
+    // Usa cant_evadidos y monto_evadido_estimado que la caja sube en cada cierre.
+    function renderEvasion() {
+        const cont = document.getElementById('evasion-contenido');
+        if (!todosLosCierres.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin datos.</p>";
+            return;
+        }
+        const hoy = new Date();
+        const agg = (lista) => lista.reduce((a, c) => ({
+            ev: a.ev + c.evadidos, monto: a.monto + c.montoEvadido, autos: a.autos + c.autos
+        }), { ev: 0, monto: 0, autos: 0 });
+
+        const mesActual = todosLosCierres.filter(c => c.date.getFullYear() === hoy.getFullYear() && c.date.getMonth() === hoy.getMonth());
+        const mesPrevio = todosLosCierres.filter(c => {
+            const p = new Date(hoy.getFullYear(), hoy.getMonth() - 1, 1);
+            return c.date.getFullYear() === p.getFullYear() && c.date.getMonth() === p.getMonth();
+        });
+        const anio = todosLosCierres.filter(c => c.date.getFullYear() === hoy.getFullYear());
+        const M = agg(mesActual), P = agg(mesPrevio), A = agg(anio);
+
+        // % de evasion = evadidos / (autos cobrados + evadidos)
+        const tasa = (x) => (x.autos + x.ev) > 0 ? (x.ev / (x.autos + x.ev) * 100) : 0;
+        const tM = tasa(M), tP = tasa(P);
+
+        // Comparacion con el mes anterior (solo si hay datos previos)
+        let compHtml = '';
+        if (mesPrevio.length) {
+            const mejora = tM <= tP;
+            const col = mejora ? '#00C853' : '#F87171';
+            const fl = mejora ? '▼' : '▲';
+            compHtml = `<span style="color:${col}" class="text-[10px] font-black">${fl} mes anterior: ${tP.toFixed(1)}%</span>`;
+        }
+
+        // Peores dias del mes por monto evadido (top 3, clicables)
+        const peores = mesActual.map(c => ({ c, idx: todosLosCierres.indexOf(c) }))
+            .filter(x => x.c.evadidos > 0)
+            .sort((a, b) => b.c.montoEvadido - a.c.montoEvadido).slice(0, 3);
+        const peoresHtml = peores.length ? `
+            <div class="border-t border-white/10 pt-3 mt-3">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Peores días del mes</p>
+                ${peores.map(x => `
+                <div onclick="abrirModal(${x.idx})" class="flex justify-between items-center py-1.5 active:scale-95 transition-all cursor-pointer">
+                    <span class="text-xs text-gray-300">${x.c.fecha || x.c.date.toLocaleDateString('es-CL')}</span>
+                    <span class="text-xs"><b class="text-[#F87171]">${x.c.evadidos} evadidos</b> <span class="text-gray-500">· ${fmt(x.c.montoEvadido)}</span></span>
+                </div>`).join('')}
+            </div>` : '';
+
+        cont.innerHTML = `
+            <div class="flex items-end justify-between mb-1">
+                <div>
+                    <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Tasa de evasión · este mes</p>
+                    <span class="text-3xl font-black" style="color:${tM > 5 ? '#F87171' : (tM > 2 ? '#FFD700' : '#00C853')}">${tM.toFixed(1)}%</span>
+                </div>
+                <div class="text-right">${compHtml}</div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+                <div class="glass p-3 border-l-4 border-[#F87171]"><p class="text-[8px] text-gray-400 uppercase font-black">Evadidos mes</p><p class="text-lg font-black text-white">${M.ev.toLocaleString('es-CL')}</p><p class="text-[10px] text-gray-500">≈ ${fmt(M.monto)} perdidos</p></div>
+                <div class="glass p-3 border-l-4 border-[#FFD700]"><p class="text-[8px] text-gray-400 uppercase font-black">Evadidos año</p><p class="text-lg font-black text-white">${A.ev.toLocaleString('es-CL')}</p><p class="text-[10px] text-gray-500">≈ ${fmt(A.monto)} perdidos</p></div>
+            </div>
+            ${peoresHtml}
+        `;
+    }
+
+    // ---------- KIOSCO MAKITO ----------
+    // Lee el sub-mapa 'makito' que sube SOLO la caja (Python): admin_stats -> hoy en vivo;
+    // historico_cierres -> mes/año. La BI solo lo muestra (nunca escribe plata).
+    function renderMakito() {
+        const cont = document.getElementById('makito-contenido');
+        if (!cont) return;
+        // "Hoy": si la jornada está abierta usa lo vivo; si cerró, el makito del cierre de hoy.
+        const live = (makitoHoy && num(makitoHoy.total) > 0) ? makitoHoy : (makitoCierreHoy || {});
+        const hoyT = num(live.total), hoyG = num(live.ganancia), hoyU = num(live.unidades);
+        // Mes/año = histórico + lo de hoy en vivo (consistente con las tarjetas del parking).
+        const M = makitoAcum.M, A = makitoAcum.A;
+        const mesT = num(M.total) + num(makitoHoy.total), mesG = num(M.ganancia) + num(makitoHoy.ganancia);
+        const mesEf = num(M.ef) + num(makitoHoy.efectivo), mesTj = num(M.tj) + num(makitoHoy.tarjeta);
+        const anioT = num(A.total) + num(makitoHoy.total), anioU = num(A.und) + num(makitoHoy.unidades);
+        const margen = mesT > 0 ? (mesG / mesT * 100) : 0;
+        const parkingMes = num(acum.M) + num(dataHoy.total);
+        const aporte = (mesT + parkingMes) > 0 ? (mesT / (mesT + parkingMes) * 100) : 0;
+
+        if (hoyT === 0 && mesT === 0 && anioT === 0) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>El kiosco aún no registra ventas. Aparecerán aquí cuando la caja (Python) las sincronice.</p>";
+            return;
+        }
+        cont.innerHTML = `
+            <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Venta Makito · hoy</p>
+                <p class="text-3xl font-black text-[#FFB300]">${fmt(hoyT)}</p>
+                <p class="text-xs text-gray-400 mt-1">Ganancia <b class="text-[#00C853]">${fmt(hoyG)}</b> · ${hoyU.toLocaleString('es-CL')} u.</p>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Venta mes</p><p class="text-lg font-black text-white">${fmt(mesT)}</p><p class="text-[10px] text-gray-500">margen ${margen.toFixed(0)}%</p></div>
+                <div class="glass p-3"><p class="text-[8px] text-gray-400 uppercase font-black">Ganancia mes</p><p class="text-lg font-black text-[#00C853]">${fmt(mesG)}</p><p class="text-[10px] text-gray-500">${anioU.toLocaleString('es-CL')} u. en el año</p></div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 mt-3">
+                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[8px] text-gray-400 uppercase font-black">Efectivo mes</p><p class="font-black text-white">${fmt(mesEf)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[8px] text-gray-400 uppercase font-black">Tarjeta mes</p><p class="font-black text-white">${fmt(mesTj)}</p></div>
+            </div>
+            <div class="flex justify-between items-center mt-4 pt-3 border-t border-white/10">
+                <span class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Venta año · ${anioActual}</span>
+                <span class="text-lg font-black text-[#FFD700]">${fmt(anioT)}</span>
+            </div>
+            <p class="text-[9px] text-gray-500 italic mt-2">Aporta ${aporte.toFixed(1)}% del total recaudado del mes (parking + kiosco).</p>
+        `;
+    }
+
+    // ---------- NAVEGACIÓN POR PESTAÑAS (Parking / Makito) ----------
+    window.mostrarTab = (t) => {
+        document.getElementById('tab-parking').classList.toggle('hidden', t !== 'parking');
+        document.getElementById('tab-makito').classList.toggle('hidden', t !== 'makito');
+        document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+        window.scrollTo({ top: 0, behavior: 'auto' });
+        // los gráficos que se pintaron mientras la pestaña estaba oculta quedan en 0px → re-dimensionar
+        if (t === 'parking') setTimeout(() => { try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {} }, 60);
+    };
+
+    // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
+    let gmStream = null, gmScanning = false, gmDetector = null;
+    const gmEsc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    function gmFlash(msg) { const m = document.getElementById('gm-scan-msg'); if (m) m.textContent = msg; }
+
+    // POR QUÉ EL ESCÁNER PUEDE NO ANDAR, EN CONCRETO.
+    // Antes todo terminaba en el mismo "No pude abrir la cámara", y con eso era imposible
+    // saber si faltaba el permiso, si el teléfono perdió el lector de códigos o si la
+    // página no venía por HTTPS. Tres causas distintas con tres arreglos distintos.
+    function gmDiagnostico() {
+        return [
+            window.isSecureContext ? 'HTTPS ok' : 'SIN HTTPS',
+            (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) ? 'cámara ok' : 'sin API de cámara',
+            ('BarcodeDetector' in window) ? 'lector ok' : 'SIN lector de códigos',
+        ].join(' · ');
+    }
+
+    // El navegador informa la causa en el NOMBRE de la excepción, no en su texto.
+    function gmMotivoCamara(e) {
+        switch (e && e.name) {
+            case 'NotAllowedError':     return 'Permiso de cámara denegado';
+            case 'NotFoundError':       return 'Este equipo no tiene cámara';
+            case 'NotReadableError':    return 'La cámara está ocupada por otra aplicación';
+            case 'OverconstrainedError':return 'No hay cámara trasera disponible';
+            case 'SecurityError':       return 'El navegador bloqueó la cámara por seguridad';
+            default:                    return 'No se pudo abrir la cámara (' + ((e && e.name) || e) + ')';
+        }
+    }
+
+    window.gmOpen = (conCamara = true) => {
+        const caja = document.getElementById('gestor-makito');
+        caja.classList.remove('hidden');
+
+        // VOLVER ARRIBA AL ABRIR. Esta es la razón real de que "el escáner dejara de
+        // verse": el modal es `overflow-y-auto` y CONSERVA la posición de scroll entre
+        // aperturas. Con pocos productos no había nada que desplazar y siempre se veía el
+        // tope; cuando el catálogo llegó a 294 el modal quedó desplazado y el video —que
+        // está arriba de todo— fuera de pantalla. La cámara encendía, pero nadie la veía.
+        // Se hace dos veces porque el elemento acaba de dejar de estar oculto y el
+        // navegador todavía no le calcula el alto.
+        caja.scrollTop = 0;
+        requestAnimationFrame(() => { caja.scrollTop = 0; });
+
+        document.getElementById('gm-panel').innerHTML = '';
+        document.getElementById('gm-cod').value = '';
+        gmRenderCatalogo();
+        gmRenderPendientes();
+
+        // La cámara arranca SOLA. El botón de la pestaña ya dice "Escanear": pedir un
+        // segundo toque para lo mismo era un paso de más. Los caminos que abren el gestor
+        // sobre un producto concreto (tocarlo en el inventario) pasan `false`, porque ahí
+        // ya se sabe cuál es y encender la cámara sobraría.
+        if (conCamara) {
+            gmStart();
+        } else {
+            gmFlash('Toca "Escanear otro" para usar la cámara, o ingresa el código a mano.');
+        }
+    };
+    window.gmClose = () => { gmStop(); document.getElementById('gestor-makito').classList.add('hidden'); };
+    window.gmStop = () => {
+        gmScanning = false;
+        if (gmStream) { gmStream.getTracks().forEach(t => t.stop()); gmStream = null; }
+    };
+    window.gmStart = async () => {
+        const video = document.getElementById('gm-video');
+
+        // 1) LA CÁMARA SE PIDE SIEMPRE, aunque falte el lector de códigos.
+        // Antes se salía antes de llegar acá si no había `BarcodeDetector`, así que la
+        // cámara ni se intentaba y el síntoma era "dejó de abrir" sin más pistas. Verla
+        // encendida separa dos problemas: el permiso del teléfono y el decodificador.
+        gmFlash('Abriendo cámara…');
+        try {
+            gmStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+            video.srcObject = gmStream;
+            await video.play();
+        } catch (e) {
+            gmFlash(gmMotivoCamara(e) + '. Ingresa el código a mano. [' + gmDiagnostico() + ']');
+            return;
+        }
+
+        // 2) EL LECTOR. `BarcodeDetector` es una API del navegador que en Android depende
+        // de un módulo de Google Play Services: una actualización puede quitarla sin que
+        // nadie toque nada. Si no está, la cámara QUEDA ABIERTA a propósito —sirve para
+        // confirmar que el permiso está bien— y el mensaje dice qué falta.
+        if (!('BarcodeDetector' in window)) {
+            gmFlash('La cámara funciona, pero este navegador ya no trae el lector de códigos. '
+                  + 'Ingresa el código a mano. [' + gmDiagnostico() + ']');
+            return;
+        }
+        try {
+            gmDetector = new BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'codabar', 'itf'] });
+        } catch (e) {
+            gmFlash('El lector de códigos no arrancó: ' + ((e && e.name) || e)
+                  + '. Ingresa el código a mano.');
+            return;
+        }
+
+        gmScanning = true;
+        gmFlash('Apunta al código de barras…');
+        let fallos = 0;
+        const tick = async () => {
+            if (!gmScanning) return;
+            try {
+                const codes = await gmDetector.detect(video);
+                if (codes && codes.length) {
+                    const c = codes[0].rawValue;
+                    gmStop();
+                    document.getElementById('gm-cod').value = c;
+                    gmRenderPanel(c);
+                    gmFlash('Código leído: ' + c);
+                    return;
+                }
+                fallos = 0;
+            } catch (e) {
+                // Antes esto se tragaba en silencio y el escáner "no hacía nada", sin
+                // explicación posible. Fallar en algunos cuadros es normal (imagen movida
+                // o borrosa); fallar treinta seguidos significa que el decodificador está
+                // roto, y eso hay que decirlo en vez de dejar la cámara girando en vano.
+                if (++fallos >= 30) {
+                    gmScanning = false;
+                    gmFlash('El lector de códigos está fallando: ' + ((e && e.name) || e)
+                          + '. Ingresa el código a mano. [' + gmDiagnostico() + ']');
+                    return;
+                }
+            }
+            requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+    };
+    window.gmBuscar = () => { const c = document.getElementById('gm-cod').value.trim(); if (c) gmRenderPanel(c); };
+
+    function gmRenderPanel(cod) {
+        const panel = document.getElementById('gm-panel');
+        if (!panel) return;
+        if (!cod) { panel.innerHTML = ''; return; }
+        const p = makitoCatalogo.find(x => String(x.codigo_barra || '') === String(cod));
+        if (p) {
+            const precio = num(p.precio), costo = num(p.costo), stock = num(p.stock);
+            const margen = precio - costo, margenPct = precio > 0 ? Math.round(margen / precio * 100) : 0;
+            const v30 = num(p.vendidos_30), ritmo = v30 / 30;
+            const dias = ritmo > 0 ? Math.round(stock / ritmo) : null;
+            let rec, recCol;
+            if (margen < 0) { rec = '⚠ Margen NEGATIVO — vendes bajo el costo'; recCol = '#F87171'; }
+            else if (v30 === 0) { rec = 'Sin ventas en 30 días · evalúa antes de reponer'; recCol = '#9CA3AF'; }
+            else if (dias !== null && dias <= 7) { rec = `Conviene reponer · te queda ~${dias} día(s) de stock`; recCol = '#00C853'; }
+            else if (dias !== null && dias <= 21) { rec = `Rota bien · stock para ~${dias} días`; recCol = '#FFD700'; }
+            else { rec = `Stock holgado${dias !== null ? ` (~${dias} días)` : ''}`; recCol = '#00E0D0'; }
+            panel.innerHTML = `
+                <div class="glass p-4 border-l-4" style="border-color:${recCol}">
+                    <p class="text-[9px] text-gray-400 uppercase font-black">Producto encontrado</p>
+                    <p class="text-lg font-black text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</p>
+                    <div class="grid grid-cols-3 gap-2 my-3 text-center">
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black ${stock <= 5 ? 'text-[#F87171]' : 'text-white'}">${stock}</p><p class="text-[8px] text-gray-400 uppercase font-black">stock</p></div>
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black text-white">${v30}</p><p class="text-[8px] text-gray-400 uppercase font-black">vend. 30d</p></div>
+                        <div class="bg-white/5 rounded-lg py-2"><p class="text-lg font-black ${margen < 0 ? 'text-[#F87171]' : 'text-[#00C853]'}">${margenPct}%</p><p class="text-[8px] text-gray-400 uppercase font-black">margen</p></div>
+                    </div>
+                    <div class="rounded-lg px-3 py-2 mb-2 text-xs font-black text-center" style="background:${recCol}22;color:${recCol}">${rec}</div>
+                    <p class="text-[10px] text-gray-400 mb-3">Ganancia 30d <b class="text-[#00C853]">${fmt(p.ganancia_30)}</b> · precio ${fmt(precio)} / costo ${fmt(costo)}${p.ultima_venta ? ` · últ. venta ${gmEsc(p.ultima_venta)}` : ''}</p>
+                    <div class="flex items-center gap-2">
+                        <input id="gm-delta" type="number" value="10" class="comp-select w-24 text-center">
+                        <button onclick="gmReponer('${gmEsc(cod)}')" class="flex-1 p-3 bg-[#00C853] text-[#0A2F4F] font-black rounded-lg">➕ Reponer stock</button>
+                    </div>
+                    <div class="mt-4 border-t border-white/10 pt-3">
+                        <p class="text-[9px] text-gray-400 uppercase font-black">¿Cambió el costo en el proveedor?</p>
+                        <p class="text-[10px] text-gray-500 mb-1">Costo guardado: ${fmt(costo)}</p>
+                        <div class="flex gap-2">
+                            <input id="gm-costo-prov" type="number" value="${costo}" inputmode="numeric" oninput="gmSimularCosto('${gmEsc(cod)}')" class="comp-select flex-1" placeholder="Costo nuevo del proveedor">
+                            <button onclick="gmGuardarCosto('${gmEsc(cod)}')" class="px-4 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar costo</button>
+                        </div>
+                        <div id="gm-impacto"></div>
+                    </div>
+                    <details class="mt-3">
+                        <summary class="text-[10px] text-gray-400 cursor-pointer">Editar nombre / precio de venta</summary>
+                        <div class="grid grid-cols-2 gap-2 mt-2">
+                            <input id="gm-nombre" value="${gmEsc(p.nombre)}" placeholder="Nombre" class="comp-select col-span-2">
+                            <input id="gm-precio" type="number" value="${precio}" placeholder="Precio de venta" class="comp-select col-span-2">
+                        </div>
+                        <button onclick="gmGuardar('${gmEsc(cod)}')" class="w-full mt-2 p-2 bg-[#00E0D0] text-[#0A2F4F] font-black rounded-lg">Guardar</button>
+                    </details>
+                </div>`;
+        } else {
+            panel.innerHTML = `
+                <div class="glass p-4 border-l-4 border-[#FFB300]">
+                    <p class="text-[9px] text-gray-400 uppercase font-black">Producto nuevo · ${gmEsc(cod)}</p>
+                    <div class="grid grid-cols-2 gap-2 mt-2">
+                        <input id="gm-nombre" placeholder="Nombre" class="comp-select col-span-2">
+                        <input id="gm-precio" type="number" placeholder="Precio" class="comp-select">
+                        <input id="gm-costo" type="number" placeholder="Costo" class="comp-select">
+                        <input id="gm-stock" type="number" value="0" placeholder="Stock inicial" class="comp-select col-span-2">
+                    </div>
+                    <button onclick="gmCrear('${gmEsc(cod)}')" class="w-full mt-2 p-3 bg-[#FFB300] text-[#0A2F4F] font-black rounded-lg">Crear producto</button>
+                </div>`;
+        }
+    }
+
+    window.gmReponer = (cod) => {
+        const delta = parseInt(document.getElementById('gm-delta').value || '0', 10);
+        if (!delta) { gmFlash('Ingresa una cantidad a reponer.'); return; }
+        gmEnviar({ tipo: 'reponer', codigo_barra: cod, delta });
+    };
+    window.gmGuardar = (cod) => {
+        const val = (id) => { const el = document.getElementById(id); return el ? el.value : null; };
+        const obj = { tipo: 'guardar', codigo_barra: cod };
+        const nombre = (val('gm-nombre') || '').trim(); if (nombre) obj.nombre = nombre;
+        const precio = val('gm-precio'); if (precio) obj.precio = parseInt(precio, 10);
+        const costo = val('gm-costo'); if (costo) obj.costo = parseInt(costo, 10);
+        gmEnviar(obj);
+    };
+    window.gmGuardarCosto = (cod) => {
+        const el = document.getElementById('gm-costo-prov');
+        gmEnviar({ tipo: 'guardar', codigo_barra: cod, costo: parseInt((el ? el.value : '0') || '0', 10) });
+    };
+    window.gmSimularCosto = (cod) => {
+        const out = document.getElementById('gm-impacto');
+        const p = makitoCatalogo.find(x => String(x.codigo_barra || '') === String(cod));
+        if (!out || !p) return;
+        const precio = num(p.precio), costoViejo = num(p.costo), v30 = num(p.vendidos_30);
+        const costoNuevo = parseInt(document.getElementById('gm-costo-prov').value || '0', 10);
+        if (!costoNuevo || costoNuevo === costoViejo) { out.innerHTML = ''; return; }
+        const dCosto = costoNuevo - costoViejo, dPct = costoViejo > 0 ? Math.round(dCosto / costoViejo * 100) : 0;
+        const margenViejo = precio - costoViejo, margenNuevo = precio - costoNuevo;
+        const mnPct = precio > 0 ? Math.round(margenNuevo / precio * 100) : 0;
+        const impactoMes = -dCosto * v30;                       // + si el costo baja, − si sube
+        const precioSug = Math.ceil((costoNuevo + margenViejo) / 50) * 50;
+        const sube = dCosto > 0, col = sube ? '#F87171' : '#00C853';
+        const fila = (lbl, val, c) => `<div class="flex justify-between text-[11px]"><span class="text-gray-400">${lbl}</span><span class="font-black" style="color:${c || '#fff'}">${val}</span></div>`;
+        out.innerHTML = `<div class="mt-2 rounded-lg p-2" style="background:${col}18">
+            ${fila('Costo', `${sube ? '+' : '−'}${fmt(Math.abs(dCosto))} (${dPct >= 0 ? '+' : ''}${dPct}%)`, col)}
+            ${fila('Margen', `${fmt(margenViejo)} → ${fmt(margenNuevo)} (${mnPct}%)`, margenNuevo < 0 ? '#F87171' : '#fff')}
+            ${v30 > 0 ? fila(`A tu ritmo (${v30}/mes)`, `${impactoMes >= 0 ? '+' : '−'}${fmt(Math.abs(impactoMes))}/mes`, col) : ''}
+            ${margenNuevo < 0 ? `<p class="text-[11px] font-black text-[#F87171] mt-1">⚠ Vendes a pérdida</p>` : (sube ? fila('Sugerido', fmt(precioSug), '#FFD700') : '')}
+        </div>`;
+    };
+    window.gmCrear = (cod) => {
+        const nombre = (document.getElementById('gm-nombre').value || '').trim();
+        if (!nombre) { gmFlash('Ponle un nombre al producto.'); return; }
+        gmEnviar({ tipo: 'guardar', codigo_barra: cod, nombre,
+            precio: parseInt(document.getElementById('gm-precio').value || '0', 10),
+            costo: parseInt(document.getElementById('gm-costo').value || '0', 10),
+            stock_inicial: parseInt(document.getElementById('gm-stock').value || '0', 10) });
+    };
+
+    async function gmEnviar(obj) {
+        try {
+            await addDoc(collection(db, 'makito_cambios'), Object.assign(
+                { aplicado: false, origen: 'admin_pwa', ts: new Date().toISOString() }, obj));
+            gmFlash('✓ Enviado. La caja lo aplicará al sincronizar.');
+            document.getElementById('gm-panel').innerHTML = '';
+            document.getElementById('gm-cod').value = '';
+        } catch (e) { gmFlash('Error al enviar: ' + (e && e.message ? e.message : e)); }
+    }
+
+    function gmRenderPendientes() {
+        const cont = document.getElementById('gm-pendientes');
+        if (!cont) return;
+        if (!makitoCambios.length) { cont.innerHTML = "<p class='text-gray-500 italic text-xs'>Sin cambios recientes.</p>"; return; }
+        cont.innerHTML = makitoCambios.slice(0, 8).map(c => {
+            const est = c.aplicado
+                ? (c.ok === false ? `<span class="text-[#F87171] text-[10px] font-black">✕ ${gmEsc(c.resultado || 'error')}</span>` : '<span class="text-[#00C853] text-[10px] font-black">✓ aplicado</span>')
+                : '<span class="text-[#FFD700] text-[10px] font-black">⏳ pendiente</span>';
+            const desc = c.tipo === 'reponer'
+                ? `Reponer ${gmEsc(c.codigo_barra)} (+${num(c.delta)})`
+                : `Guardar ${gmEsc(c.nombre || c.codigo_barra)}`;
+            return `<div class="flex justify-between items-center glass p-2 text-xs"><span class="text-gray-300">${desc}</span>${est}</div>`;
+        }).join('');
+    }
+
+    // OJO: se declara como funcion (por el hoisting, que otras partes aprovechan) y
+    // ADEMAS se cuelga de window justo debajo. El script es `type="module"`, y en un
+    // modulo las declaraciones NO son globales: sin esa linea, el `oninput` del filtro
+    // llama a algo que no existe y el buscador del catalogo no hace nada. Estuvo asi.
+    function gmRenderCatalogo() {
+        const cont = document.getElementById('gm-catalogo');
+        const count = document.getElementById('gm-cat-count');
+        if (!cont) return;
+        if (count) count.textContent = makitoCatalogo.length ? (makitoCatalogo.length + ' en catálogo') : '';
+        if (!makitoCatalogo.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-xs'>El catálogo aún no llega desde la caja. Requiere la caja con v14.5 sincronizando y las reglas de Firestore publicadas.</p>";
+            return;
+        }
+        const fEl = document.getElementById('gm-cat-filtro');
+        const q = (fEl ? fEl.value : '').trim().toLowerCase();
+        const lista = makitoCatalogo.filter(p => !q
+            || String(p.nombre || '').toLowerCase().includes(q)
+            || String(p.codigo_barra || '').toLowerCase().includes(q));
+        if (!lista.length) { cont.innerHTML = "<p class='text-gray-500 italic text-xs'>Sin coincidencias.</p>"; return; }
+        cont.innerHTML = lista.map(p => {
+            const bajo = num(p.stock) <= 5;
+            return `<div onclick="gmTocarProducto('${gmEsc(p.codigo_barra)}')" class="flex justify-between items-center glass p-3 active:scale-95 transition-all cursor-pointer">
+                <div><span class="text-sm font-bold text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</span><br><span class="text-[9px] text-gray-500">${gmEsc(p.codigo_barra) || 'sin código'} · ${fmt(p.precio)}</span></div>
+                <span class="text-sm font-black ${bajo ? 'text-[#F87171]' : 'text-[#00C853]'}">${num(p.stock)} u.</span>
+            </div>`;
+        }).join('');
+    }
+    window.gmRenderCatalogo = gmRenderCatalogo;
+    window.gmTocarProducto = (cod) => {
+        if (!cod) { gmFlash('Ese producto no tiene código de barra. Edítalo desde la caja.'); return; }
+        document.getElementById('gm-cod').value = cod;
+        gmRenderPanel(cod);
+        gmFlash('Producto seleccionado.');
+        try { document.getElementById('gm-panel').scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch (e) {}
+    };
+
+    // Inventario visible en la pestaña Makito (mismo espejo makitoCatalogo que el gestor).
+    // Stock bajo (<=5) primero y en rojo. Tocar un producto abre el gestor ya seleccionado.
+    window.renderInventario = () => {
+        const cont = document.getElementById('inv-lista');
+        const count = document.getElementById('inv-count');
+        if (!cont) return;
+        if (count) count.textContent = makitoCatalogo.length ? (makitoCatalogo.length + ' productos') : '';
+        if (!makitoCatalogo.length) {
+            cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Aún no llega el catálogo desde la caja.</p>";
+            return;
+        }
+        const fEl = document.getElementById('inv-filtro');
+        const q = (fEl ? fEl.value : '').trim().toLowerCase();
+        const lista = makitoCatalogo.filter(p => !q
+            || String(p.nombre || '').toLowerCase().includes(q)
+            || String(p.codigo_barra || '').toLowerCase().includes(q));
+        if (!lista.length) { cont.innerHTML = "<p class='text-gray-500 italic text-center text-xs'>Sin coincidencias.</p>"; return; }
+        const ord = lista.slice().sort((a, b) => num(a.stock) - num(b.stock));
+        cont.innerHTML = ord.map(p => {
+            const bajo = num(p.stock) <= 5;
+            return `<div onclick="invTocar('${gmEsc(p.codigo_barra)}')" class="flex justify-between items-center glass p-3 active:scale-95 transition-all cursor-pointer">
+                <div><span class="text-sm font-bold text-white">${gmEsc(p.emoji)} ${gmEsc(p.nombre)}</span><br><span class="text-[9px] text-gray-500">${gmEsc(p.codigo_barra) || 'sin código'} · ${fmt(p.precio)}</span></div>
+                <span class="text-sm font-black ${bajo ? 'text-[#F87171]' : 'text-[#00C853]'}">${num(p.stock)} u.</span>
+            </div>`;
+        }).join('');
+    };
+    // Abre el gestor ya posicionado en el producto (para reponer o corregir).
+    window.invTocar = (cod) => { gmOpen(false); if (cod) gmTocarProducto(cod); };
+
+    window.abrirModal = (idx) => {
+        const d = cierresData[idx];
+        if (!d) return;
+        const pases = num(d.cant_pases), minutos = num(d.cant_minutos), autos = pases + minutos;
+        const ticket = autos ? num(d.total_recaudado) / autos : 0;
+        const pct = (x) => autos ? Math.round(x / autos * 100) : 0;
+        document.getElementById('modal-fecha').innerText = d.fecha || '--';
+        document.getElementById('modal-content').innerHTML = `
+            <div class="glass p-5 text-center"><p class="text-[10px] text-gray-400 font-black uppercase">Recaudado</p><p class="text-3xl font-black text-[#00E0D0]">${fmt(d.total_recaudado)}</p></div>
+            <div class="grid grid-cols-2 gap-4">
+                <div class="glass p-3 border-l-4 border-[#00C853]"><p class="text-[9px] font-bold uppercase text-gray-400">Efectivo</p><p class="font-black">${fmt(d.efectivo)}</p></div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]"><p class="text-[9px] font-bold uppercase text-gray-400">Tarjeta</p><p class="font-black">${fmt(d.tarjeta)}</p></div>
+            </div>
+            <div class="glass p-4">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-[10px] text-gray-400 font-black uppercase">Autos</span>
+                    <span class="text-2xl font-black text-white">${autos.toLocaleString('es-CL')}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="border-l-4 border-[#FFD700] pl-2"><p class="text-[9px] text-gray-400 font-bold uppercase">Pase diario</p><p class="font-black text-white">${pases.toLocaleString('es-CL')} <span class="text-[10px] text-gray-500">${pct(pases)}%</span></p><p class="text-[10px] text-gray-500">${fmt(d.dinero_pases)}</p></div>
+                    <div class="border-l-4 border-[#00E0D0] pl-2"><p class="text-[9px] text-gray-400 font-bold uppercase">Por minuto</p><p class="font-black text-white">${minutos.toLocaleString('es-CL')} <span class="text-[10px] text-gray-500">${pct(minutos)}%</span></p><p class="text-[10px] text-gray-500">${fmt(d.dinero_minutos)}</p></div>
+                </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="glass p-3"><p class="text-[9px] text-gray-400 font-bold uppercase">Ticket promedio</p><p class="font-black text-white">${autos ? fmt(ticket) : '—'}</p></div>
+                <div class="glass p-3"><p class="text-[9px] text-gray-400 font-bold uppercase">Kiosco Makito</p><p class="font-black text-white">${fmt(d.total_makito)}</p></div>
+            </div>
+            ${num(d.plus_minuto) > 0 ? `<div class="glass p-3 flex justify-between items-center border-l-4 border-[#00C853]"><span class="text-[9px] text-gray-400 font-bold uppercase">➕ Plus Minuto</span><span class="font-black text-[#00C853]">${fmt(d.plus_minuto)}</span></div>` : ''}
+            ${(() => { if (!d.por_hora) return ''; const es = Object.entries(d.por_hora); if (!es.length) return ''; const [h, v] = es.sort((a, b) => num(b[1]) - num(a[1]))[0]; return `<div class="glass p-3 flex justify-between items-center"><span class="text-[9px] text-gray-400 font-bold uppercase">⏰ Hora punta</span><span class="font-black text-white">${h}:00 <span class="text-[10px] text-gray-500">· ${num(v)} autos</span></span></div>`; })()}
+            ${num(d.cant_evadidos) > 0 ? `
+            <div class="glass p-3 border-l-4 border-[#F87171]">
+                <div class="flex justify-between items-center">
+                    <span class="text-[9px] text-gray-400 font-bold uppercase">⚠ Evasiones</span>
+                    <span class="font-black text-[#F87171]">${num(d.cant_evadidos)} <span class="text-[10px] text-gray-500">· ≈ ${fmt(d.monto_evadido_estimado)}</span></span>
+                </div>
+            </div>` : ''}
+        `;
+        document.getElementById('modal-detalle').classList.remove('hidden');
+    };
+
+    window.cerrarModal = () => document.getElementById('modal-detalle').classList.add('hidden');
+    window.cerrarSesion = () => signOut(auth);
+
+    document.getElementById('btn-entrar').onclick = verificarClave;
+    document.getElementById('input-pass').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') verificarClave();
+    });
+
+    // Eventos del comparador
+    document.querySelectorAll('.comp-modo').forEach(btn => {
+        btn.onclick = () => {
+            compModo = btn.dataset.modo;
+            document.querySelectorAll('.comp-modo').forEach(b => b.classList.toggle('active', b === btn));
+            renderComparador();
+        };
+    });
+    document.getElementById('comp-a').onchange = compRender;
+    document.getElementById('comp-b').onchange = compRender;
+    document.getElementById('comp-a-date').onchange = compRender;
+    document.getElementById('comp-b-date').onchange = compRender;
+    document.querySelector('.comp-modo[data-modo="mes"]').classList.add('active');
+
+    // Dots de carrusel + splash de apertura
+    initCarouselDots();
+    setTimeout(() => {
+        const sp = document.getElementById('splash');
+        if (sp) { sp.classList.add('oculto'); setTimeout(() => sp.remove(), 550); }
+    }, 1600);
+
+    // Estado de sesion: Firebase Auth persiste el login en el dispositivo.
+    // Si ya inicio sesion antes, entra directo; si no, muestra el bloqueo.
+    let escuchasIniciadas = false;
+    onAuthStateChanged(auth, (user) => {
+        const lock = document.getElementById('pantalla-bloqueo');
+        if (user && user.email === ADMIN_EMAIL) {
+            lock.style.display = 'none';
+            if (!escuchasIniciadas) { escuchasIniciadas = true; iniciarEscuchas(); }
+        } else {
+            lock.style.display = 'flex';
+        }
+    });
