@@ -231,6 +231,16 @@
             <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
         </div>
 
+        <!-- GESTIÓN ANTES QUE CATÁLOGO, a propósito. Es la acción del día —escanear para
+             reponer— y estaba al final, después de una lista de 294 productos que había
+             que recorrer entera para llegar. Lo que se usa va arriba; lo que se consulta,
+             abajo. -->
+        <div class="card border-t-4 border-[#FFB300]">
+            <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
+            <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
+            <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
+        </div>
+
         <div class="card border-t-4 border-[#FFB300]">
             <div class="flex justify-between items-center mb-3">
                 <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">📦 Catálogo · Inventario</h2>
@@ -238,12 +248,6 @@
             </div>
             <input id="inv-filtro" oninput="renderInventario()" class="comp-select w-full mb-3" placeholder="Filtrar por nombre o código…">
             <div id="inv-lista" class="space-y-2 lista-scroll"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
-        </div>
-
-        <div class="card border-t-4 border-[#FFB300]">
-            <h2 class="mb-3 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛠 Gestión de Kiosco</h2>
-            <button onclick="gmOpen()" class="w-full p-4 bg-[#FFB300] text-[#0A2F4F] font-black rounded-2xl active:scale-95 transition-all">📷 Escanear · Agregar / Reponer producto</button>
-            <p class="text-[9px] text-gray-500 italic text-center mt-2">Los cambios los aplica la caja al sincronizar.</p>
         </div>
     </div><!-- /tab-makito -->
 
