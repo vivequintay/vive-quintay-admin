@@ -1426,6 +1426,10 @@
         }).join('');
     }
 
+    // OJO: se declara como funcion (por el hoisting, que otras partes aprovechan) y
+    // ADEMAS se cuelga de window justo debajo. El script es `type="module"`, y en un
+    // modulo las declaraciones NO son globales: sin esa linea, el `oninput` del filtro
+    // llama a algo que no existe y el buscador del catalogo no hace nada. Estuvo asi.
     function gmRenderCatalogo() {
         const cont = document.getElementById('gm-catalogo');
         const count = document.getElementById('gm-cat-count');
@@ -1449,6 +1453,7 @@
             </div>`;
         }).join('');
     }
+    window.gmRenderCatalogo = gmRenderCatalogo;
     window.gmTocarProducto = (cod) => {
         if (!cod) { gmFlash('Ese producto no tiene código de barra. Edítalo desde la caja.'); return; }
         document.getElementById('gm-cod').value = cod;
