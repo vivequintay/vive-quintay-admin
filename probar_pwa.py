@@ -122,12 +122,32 @@ def main():
 
     print()
     print("3) LA ESTRUCTURA SIGUE AHI")
-    for marca in ("tab-parking", "tab-makito", "gestor-makito", "escaner-caja",
-                  "pantalla-bloqueo", "inv-lista"):
+    for marca in ("gestor-makito", "escaner-caja", "pantalla-bloqueo", "inv-lista",
+                  "makito-productos", "makito-historico"):
         ok = marca in dom
         print("   %-18s %s" % (marca, "presente" if ok else "*** AUSENTE"))
         if not ok:
             fallos.append(marca)
+
+    print()
+    print("4) CADA PESTAÑA TIENE SU PANEL")
+    # Un boton de pestania sin panel al que apuntar es un boton que no hace nada. Es un
+    # error facil de cometer al mover tarjetas de un panel a otro y no se ve mirando: la
+    # pestania se pinta activa igual y la pantalla queda en blanco.
+    for pagina in ("parking", "makito"):
+        pes = set(re.findall(r'class="pes"[^>]*data-panel="(\w+)"', dom))
+        pes |= set(re.findall(r'data-panel="(\w+)"\s+role="tab"', dom))
+        paneles = set(re.findall(
+            r'class="panel[^"]*"\s+data-de="%s"\s+data-panel="(\w+)"' % pagina, dom))
+        botones = set(re.findall(
+            r'<nav class="pestanas" data-de="%s".*?</nav>' % pagina, dom, re.S))
+        botones = set(re.findall(r'data-panel="(\w+)"', botones.pop())) if botones else set()
+        huerfanos = botones - paneles
+        print("   %-8s %d pestañas · %d paneles %s"
+              % (pagina, len(botones), len(paneles),
+                 "" if not huerfanos else "*** SIN PANEL: " + ", ".join(sorted(huerfanos))))
+        if huerfanos or not botones:
+            fallos.append("pestañas de " + pagina)
 
     print()
     print("RESULTADO: " + ("FALLA (" + ", ".join(fallos) + ")" if fallos else "TODO OK"))

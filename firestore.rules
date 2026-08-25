@@ -64,6 +64,14 @@ service cloud.firestore {
       allow read: if isAdmin();
       allow write: if false;
     }
+    // RANKING DE PRODUCTOS DEL KIOSCO
+    // UN documento con los 284 productos adentro: que se vendio, cuanto y con que
+    // ganancia, en toda la vida de Makito. Uno por producto costaria 284 lecturas
+    // por apertura; asi cuesta una.
+    match /makito_ranking/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
     // ▲▲▲ NUEVO ▲▲▲
 
     // GESTION DE CATALOGO MAKITO (admin, desde el telefono)

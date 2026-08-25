@@ -9,7 +9,7 @@
 // algo no existe. Ese arnes es lo que hace que tocar este archivo no sea a ciegas.
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-    import { getFirestore, doc, onSnapshot, collection, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+    import { getFirestore, doc, getDoc, onSnapshot, collection, query, orderBy, addDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
     import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 // Piezas sin estado (ver js/util.js)
@@ -17,8 +17,10 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
 import { iniciarNavegacion, irA, irAPortada } from './navegacion.js';
+import { iniciarPestanas, abrirPestana, pestanaActual } from './pestanas.js';
 import { renderTotal as pintarTotal } from './total.js';
-import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
+import { renderProductos as pintarProductos } from './productos.js';
+import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistoricoKiosco,
          renderMesKiosco, vigilarTamano, makitoDeCierre, resumenMes } from './kiosco.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
@@ -43,7 +45,9 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
     let makitoCambios = [];
     // Mes elegido en el calendario del kiosco. Vacio = el mes en curso, que es lo normal.
     let kioscoMes = '';
-    let historiaKiosco = {};   // un doc por mes (historico_kiosco), nov-2023 en adelante    // cola de órdenes del teléfono (pendiente/aplicado)
+    let historiaKiosco = {};   // un doc por mes (historico_kiosco), nov-2023 en adelante
+    let rankingKiosco = null;  // makito_ranking/general: los 284 productos en UN documento
+    let prodFiltro = '', prodOrden = 'vendido';    // cola de órdenes del teléfono (pendiente/aplicado)
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
     document.getElementById('label-anio-actual').innerText = anioActual;
@@ -857,6 +861,7 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
             // La tendencia termina en el mes elegido, asi que el calendario mueve LOS DOS
             // graficos: elegir febrero muestra febrero dia por dia y el año que llega hasta
             // ahi. Un solo control para las dos preguntas.
+            renderHistoricoKiosco(unida);
             renderTendenciaKiosco(unida, mesVista);
             renderMesKiosco(unida, mesVista);
             vigilarTamano();   // desde aca en adelante se corrige solo (ver js/kiosco.js)
@@ -905,6 +910,29 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
         });
     }
 
+    // ---------- PRODUCTOS DEL KIOSCO (el ranking de toda la vida de Makito) ----------
+    // SE PIDE UNA SOLA VEZ Y NO SE ESCUCHA. Es historia cerrada de Eleventa: no va a cambiar
+    // mientras la app está abierta, así que `onSnapshot` sería una suscripción viva para
+    // nada. Y se pide la PRIMERA VEZ QUE SE MIRA, no al abrir: la mayoría de las visitas
+    // entran a ver la plata del día y nunca abren esta pestaña.
+    async function renderProductos() {
+        if (rankingKiosco === null) {
+            rankingKiosco = false;   // 'false' = pidiéndolo, para no pedirlo dos veces seguidas
+            try {
+                const s = await getDoc(doc(db, 'makito_ranking', 'general'));
+                rankingKiosco = s.exists() ? s.data() : {};
+            } catch (e) {
+                console.error('makito_ranking (¿reglas publicadas?):', e);
+                rankingKiosco = {};
+            }
+        }
+        if (rankingKiosco === false) return;   // aún viajando; el await de arriba lo pintará
+        pintarProductos(rankingKiosco, prodFiltro, prodOrden);
+    }
+
+    window.productosOrden = (c) => { prodOrden = c; renderProductos(); };
+    window.productosFiltrar = (t) => { prodFiltro = t; renderProductos(); };
+
     // ---------- NAVEGACIÓN (portada + tres páginas que se deslizan) ----------
     // La mecánica vive en js/navegacion.js. Aquí sólo se dice QUÉ hacer cuando una página
     // queda a la vista: redibujar lo que estaba escondido. Un gráfico pintado en una
@@ -916,13 +944,29 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
     // vieja guardada en el teléfono: que apunte a la página nueva en vez de reventar.
     window.mostrarTab = (t) => irA(t === 'makito' ? 'makito' : 'parking');
 
+    // Redibujar lo que estaba escondido. Un gráfico pintado dentro de algo invisible mide
+    // cero y se queda con esa medida; hay que pedirle que se vuelva a medir cuando aparece.
+    // Vale igual para las dos formas de esconder: cambiar de página y cambiar de pestaña.
+    const remedir = () => {
+        try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {}
+    };
+
     iniciarNavegacion((pagina) => {
         window.scrollTo({ top: 0, behavior: 'auto' });
         setTimeout(() => {
-            try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {}
+            remedir();
             if (pagina === 'makito') { try { renderMakito(); } catch (e) {} }
             if (pagina === 'total') { try { renderTotal(); } catch (e) {} }
         }, 60);
+    });
+
+    // ---------- PESTAÑAS (los temas dentro de cada negocio) ----------
+    window.abrirPestana = (pag, panel) => abrirPestana(pag, panel);
+    iniciarPestanas((pagina, panel) => {
+        setTimeout(remedir, 60);
+        // El ranking se arma la primera vez que se entra a mirarlo, no al abrir la app:
+        // son 283 productos que la mayoría de las visitas no van a pedir.
+        if (pagina === 'makito' && panel === 'productos') { try { renderProductos(); } catch (e) {} }
     });
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------

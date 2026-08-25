@@ -24,8 +24,9 @@
 // que el dibujo muestra, que es donde un error pasa desapercibido.
 
 import { unirHistoria, serieMensual, compararAnioAnterior, makitoDeCierre,
-         resumenMes } from './js/kiosco.js';
+         resumenMes, totalHistorico } from './js/kiosco.js';
 import { consolidar, tasaCaptura, gastoPorAuto, lucesYSombras } from './js/total.js';
+import { ordenar, concentracion, sinRotar, filtrar, margen } from './js/productos.js';
 
 const res = [];
 let malas = 0;
@@ -135,6 +136,64 @@ igual('sin nada devuelve vacio', unirHistoria(null, null), {});
 igual('un cierre sin fecha no revienta', unirHistoria({}, [{ makito: { total: 5 } }]), {});
 igual('un cierre sin makito cuenta cero',
       unirHistoria({}, [{ date: new Date(2026, 0, 5) }])['2026-01'].total, 0);
+
+
+// ---- totalHistorico: el tamano real de Makito ----
+// La cifra que faltaba en la app. El riesgo no es la suma, es de que se divide: el promedio
+// por dia tiene que usar dias ABIERTOS, no dias del calendario.
+const VIDA = {
+    '2023-11': { total: 100, ganancia: 50, tickets: 4, dias_abiertos: 2, dias: { 23: {}, 24: {} } },
+    '2023-12': { total: 300, ganancia: 100, tickets: 6, dias_abiertos: 3, dias: { 1: {}, 2: {}, 3: {} } },
+};
+igual('suma todos los meses', totalHistorico(VIDA).total, 400);
+igual('suma la ganancia', totalHistorico(VIDA).ganancia, 150);
+igual('cuenta los meses', totalHistorico(VIDA).meses, 2);
+igual('sabe desde cuando', totalHistorico(VIDA).desde, '2023-11');
+igual('sabe hasta cuando', totalHistorico(VIDA).hasta, '2023-12');
+igual('el margen sale de los dos totales', totalHistorico(VIDA).margen, 37.5);
+igual('divide por dias ABIERTOS y no por el calendario', totalHistorico(VIDA).porDia, 80);
+igual('el ticket promedio sale de los tickets', totalHistorico(VIDA).ticketPromedio, 40);
+
+// Lo que arma la caja no trae `dias_abiertos`: hay que contar las llaves del mapa.
+igual('sin dias_abiertos cuenta las llaves de dias',
+      totalHistorico({ '2026-07': { total: 90, dias: { 1: {}, 2: {}, 3: {} } } }).dias, 3);
+// Los cierres de la caja no cuentan tickets: no se puede inventar un promedio con cero.
+igual('sin tickets NO inventa un ticket promedio',
+      totalHistorico({ '2026-07': { total: 90, dias: {} } }).ticketPromedio, 0);
+igual('sin nada no revienta ni divide por cero', totalHistorico({}).total, 0);
+igual('sin nada el margen es cero', totalHistorico(null).margen, 0);
+
+// ---- productos: el ranking ----
+const P = [
+    { n: 'YORK CREMA', c: '1', u: 3810, v: 2285250, g: 694753, t: 1750 },
+    { n: 'CACHANTUN',  c: '2', u: 718,  v: 721250,  g: 361257, t: 700 },
+    { n: 'RED BULL',   c: '3', u: 150,  v: 269010,  g: 130290, t: 140 },
+    { n: 'CHICLE',     c: '4', u: 2,    v: 1000,    g: 900,    t: 2 },
+];
+igual('ordena por vendido', ordenar(P, 'vendido')[0].n, 'YORK CREMA');
+igual('ordena por unidades', ordenar(P, 'unidades')[0].n, 'YORK CREMA');
+igual('ordena por ganancia', ordenar(P, 'ganancia')[0].n, 'YORK CREMA');
+// El chicle tiene 90% de margen con DOS unidades vendidas. No puede encabezar nada.
+igual('el margen de un producto sin volumen no encabeza el podio',
+      ordenar(P, 'margen')[0].n, 'CACHANTUN');
+igual('pero el producto sin volumen sigue estando en la lista', ordenar(P, 'margen').length, 4);
+igual('ordenar no toca la lista original', P[0].n, 'YORK CREMA');
+igual('el margen se calcula sobre lo vendido', margen({ v: 200, g: 50 }), 25);
+igual('un producto sin ventas no divide por cero', margen({ v: 0, g: 5 }), 0);
+
+igual('la concentracion cuenta cuantos hacen el 80%', concentracion(P).cuantos, 2);
+igual('y sobre cuantos', concentracion(P).de, 4);
+igual('sin productos la concentracion es cero', concentracion([]).cuantos, 0);
+
+igual('los que casi no rotan salen a la luz', sinRotar(P).map(p => p.n), ['CHICLE']);
+igual('un producto con cero unidades no es "poca rotacion", es otra cosa',
+      sinRotar([{ n: 'X', u: 0, v: 0 }]).length, 0);
+
+igual('filtra por nombre', filtrar(P, 'red').map(p => p.n), ['RED BULL']);
+igual('filtra sin importar mayusculas', filtrar(P, 'YORK').length, 1);
+igual('filtra por codigo', filtrar(P, '2').map(p => p.n), ['CACHANTUN']);
+igual('sin filtro devuelve todo', filtrar(P, '').length, 4);
+igual('filtrar nada no revienta', filtrar(null, 'x'), []);
 
 document.getElementById('salida').innerHTML =
     res.join('\n') + `\n\nRESULTADO_PRUEBAS:${malas === 0 ? 'TODAS OK (' + res.length + ')' : malas + ' FALLARON'}`;

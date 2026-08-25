@@ -123,6 +123,42 @@ export function unirHistoria(historico, cierres) {
 }
 
 
+// TODO lo que Makito lleva vendido, de punta a punta.
+//
+// Es la cifra que faltaba. Makito estaba subvalorado justamente porque nunca se veía junto:
+// un mes suelto no parece nada, y la app sólo sabía mostrar meses sueltos. Sumados son dos
+// años y medio de kiosco.
+//
+// Los días abiertos se cuentan de verdad —no se asume que el mes tenga treinta— porque el
+// promedio por día es lo que dice si conviene abrir, y dividir por días cerrados lo hunde.
+export function totalHistorico(unida) {
+    let total = 0, ganancia = 0, tickets = 0, dias = 0;
+    const claves = Object.keys(unida || {}).sort();
+
+    claves.forEach((k) => {
+        const m = unida[k];
+        total += num(m.total);
+        ganancia += num(m.ganancia);
+        tickets += num(m.tickets);
+        // `dias_abiertos` sólo viene en lo importado de Eleventa; en lo que arma la caja hay
+        // que contar las llaves del mapa de días.
+        dias += num(m.dias_abiertos) || Object.keys(m.dias || {}).length;
+    });
+
+    return {
+        total, ganancia, tickets, dias,
+        meses: claves.length,
+        desde: claves[0] || null,
+        hasta: claves[claves.length - 1] || null,
+        margen: total > 0 ? ganancia / total * 100 : 0,
+        // El ticket promedio sólo existe donde hubo tickets contados: los cierres de la caja
+        // no los traen, así que se calcula sobre lo que sí se sabe en vez de inventar cero.
+        ticketPromedio: tickets > 0 ? total / tickets : 0,
+        porDia: dias > 0 ? total / dias : 0,
+    };
+}
+
+
 // Los ultimos `n` meses hasta `hasta` (inclusive), en orden cronologico y SIN huecos: un
 // mes cerrado sin ventas tiene que verse como cero y no desaparecer del eje.
 export function serieMensual(unida, hasta, n = MESES_TENDENCIA) {
@@ -156,6 +192,50 @@ export function compararAnioAnterior(unida, fecha) {
         anterior: antes.total,
         etiqueta: `${MESES[fecha.getMonth()].slice(0, 3)}-${String(fecha.getFullYear() - 1).slice(2)}`,
     };
+}
+
+
+// "MES-AÑO" legible a partir de la clave '2023-11'.
+function mesBonito(clave) {
+    if (!clave) return '';
+    const [a, m] = clave.split('-');
+    return `${MESES[Number(m) - 1].slice(0, 3).toLowerCase()}-${a.slice(2)}`;
+}
+
+
+export function renderHistoricoKiosco(unida) {
+    const cont = document.getElementById('makito-historico');
+    if (!cont) return;
+
+    const h = totalHistorico(unida);
+    if (!h.meses) { cont.innerHTML = ''; return; }
+
+    cont.innerHTML = `
+        <div class="card border-t-4 border-[#FFB300] text-center">
+            <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest">Makito ha vendido</p>
+            <p class="text-4xl font-black text-[#FFB300] leading-tight">${fmt(h.total)}</p>
+            <p class="text-xs text-gray-400 mt-1">
+                Ganancia <b class="text-[#00C853]">${fmt(h.ganancia)}</b> · margen ${h.margen.toFixed(0)}%
+            </p>
+            <div class="flex gap-2 mt-4">
+                <div class="glass p-3 flex-1">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Por día abierto</p>
+                    <p class="text-base font-black text-white">${fmt(h.porDia)}</p>
+                </div>
+                ${h.ticketPromedio > 0 ? `
+                <div class="glass p-3 flex-1">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Ticket promedio</p>
+                    <p class="text-base font-black text-white">${fmt(h.ticketPromedio)}</p>
+                </div>` : ''}
+                <div class="glass p-3 flex-1">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Días abiertos</p>
+                    <p class="text-base font-black text-white">${h.dias.toLocaleString('es-CL')}</p>
+                </div>
+            </div>
+            <p class="text-[9px] text-gray-500 mt-3">
+                Desde ${mesBonito(h.desde)} hasta ${mesBonito(h.hasta)} · ${h.meses} meses
+            </p>
+        </div>`;
 }
 
 

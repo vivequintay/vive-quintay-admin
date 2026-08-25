@@ -126,6 +126,28 @@
         .puntos .p { width: 7px; height: 7px; border-radius: 9999px; background: rgba(255,255,255,.22);
                      transition: all .25s ease; pointer-events: auto; }
         .puntos .p.on { width: 22px; background: #00E0D0; }
+
+        /* ═══ PESTAÑAS INTERNAS ═══════════════════════════════════════════════════
+           Dos ejes que no se pisan: deslizar cambia de NEGOCIO, tocar arriba cambia de
+           TEMA dentro del negocio. La página de parking medía 1.721 px de alto; para
+           llegar al historial de cierres había que pasar por delante de nueve gráficos.
+
+           PEGADA ARRIBA (`sticky`) porque el contenedor que hace scroll es `.pagina`, no
+           la ventana: así se puede cambiar de tema sin volver al principio. Y el fondo es
+           opaco a propósito — con transparencia se lee el contenido pasando por debajo. */
+        .pestanas { position: sticky; top: -14px; z-index: 40;
+                    display: flex; gap: 4px; margin: -14px -14px 14px; padding: 12px 14px;
+                    background: #0A2F4F; border-bottom: 1px solid #16324D;
+                    overflow-x: auto; scrollbar-width: none; }
+        .pestanas::-webkit-scrollbar { display: none; }
+        .pes { flex: 1 1 0; min-width: max-content; white-space: nowrap;
+               padding: 8px 12px; border-radius: 10px;
+               font-size: 11.5px; font-weight: 800; letter-spacing: .3px;
+               color: #6B7280; background: transparent;
+               transition: background .15s ease, color .15s ease; }
+        .pes.on { background: #0D3B5C; color: #fff; box-shadow: inset 0 0 0 1px #1B263B; }
+        .pagina[data-pagina="makito"] .pes.on { color: #FFB300; }
+        .panel.oculta { display: none; }
     </style>
 </head>
 <!-- Sin padding ni scroll propio: cada pagina se encarga de los suyos. -->
@@ -162,7 +184,15 @@
             </div>
             <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 text-xl leading-none">&#128274;</button>
         </div>
-    <div id="tab-parking">
+    <nav class="pestanas" data-de="parking" role="tablist">
+        <button class="pes" data-panel="hoy"       role="tab">Hoy</button>
+        <button class="pes" data-panel="historico" role="tab">Histórico</button>
+        <button class="pes" data-panel="comparar"  role="tab">Comparar</button>
+        <button class="pes" data-panel="evasion"   role="tab">Evasión</button>
+    </nav>
+
+    <!-- ══ HOY ══ lo que está pasando ahora mismo y lo que viene ══ -->
+    <div class="panel" data-de="parking" data-panel="hoy">
 
     <div class="card border-t-4 border-[#00C853] p-0 overflow-hidden">
         <div class="carousel-container">
@@ -204,40 +234,26 @@
         </div>
     </div>
 
-    <div class="card p-0 overflow-hidden">
-        <div class="carousel-container">
-            <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento HOY (Hora Punta)</h2>
-                <div id="horapunta-vacio" class="flex flex-col items-center justify-center text-center px-4" style="min-height:150px;">
-                    <span class="text-3xl mb-3 opacity-60">⏰</span>
-                    <p class="text-gray-500 text-xs italic leading-relaxed">El desglose por hora se activará cuando la caja (Python) registre los datos horarios.</p>
-                </div>
-                <canvas id="chartHoy" style="max-height: 180px; display:none;"></canvas></div>
-            <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento MENSUAL (Días)</h2><canvas id="chartMensual" style="max-height: 180px;"></canvas></div>
-            <div class="carousel-item p-5"><h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento ANUAL (Meses)</h2><canvas id="chartAnual" style="max-height: 180px;"></canvas></div>
+    <!-- LOS CARRUSELES SE DESARMARON. Un carrusel esconde dos gráficos detrás de un gesto
+         que nadie sabe que existe; además mezclaba HOY con MES y AÑO en una misma tarjeta,
+         justo lo que las pestañas vienen a separar. Ahora cada gráfico está donde
+         corresponde y a la vista. Los ids no cambian: el resto del programa sigue igual. -->
+    <div class="card p-5">
+        <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento HOY (Hora Punta)</h2>
+        <div id="horapunta-vacio" class="flex flex-col items-center justify-center text-center px-4" style="min-height:150px;">
+            <span class="text-3xl mb-3 opacity-60">⏰</span>
+            <p class="text-gray-500 text-xs italic leading-relaxed">El desglose por hora se activará cuando la caja (Python) registre los datos horarios.</p>
         </div>
+        <canvas id="chartHoy" style="max-height: 180px; display:none;"></canvas>
     </div>
 
-    <div class="card p-0 overflow-hidden">
-        <div class="carousel-container">
-            <div class="carousel-item p-5">
-                <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Distribución Pagos (Hoy)</h2>
-                <div class="flex items-center justify-between">
-                    <div class="w-[45%]"><canvas id="chartPagosHoy" style="max-height: 110px;"></canvas></div>
-                    <div class="w-[50%] space-y-3">
-                        <div class="flex flex-col border-l-4 border-[#00C853] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Efectivo</span><span id="ef-hoy" class="text-lg font-black text-white">$0</span></div>
-                        <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Tarjeta</span><span id="tj-hoy" class="text-lg font-black text-white">$0</span></div>
-                    </div>
-                </div>
-            </div>
-            <div class="carousel-item p-5">
-                <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Distribución Pagos (Mes)</h2>
-                <div class="flex items-center justify-between">
-                    <div class="w-[45%]"><canvas id="chartPagosMes" style="max-height: 110px;"></canvas></div>
-                    <div class="w-[50%] space-y-3">
-                        <div class="flex flex-col border-l-4 border-[#00C853] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Efectivo</span><span id="ef-mes" class="text-lg font-black text-white">$0</span></div>
-                        <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Tarjeta</span><span id="tj-mes" class="text-lg font-black text-white">$0</span></div>
-                    </div>
-                </div>
+    <div class="card p-5">
+        <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Distribución Pagos (Hoy)</h2>
+        <div class="flex items-center justify-between">
+            <div class="w-[45%]"><canvas id="chartPagosHoy" style="max-height: 110px;"></canvas></div>
+            <div class="w-[50%] space-y-3">
+                <div class="flex flex-col border-l-4 border-[#00C853] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Efectivo</span><span id="ef-hoy" class="text-lg font-black text-white">$0</span></div>
+                <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Tarjeta</span><span id="tj-hoy" class="text-lg font-black text-white">$0</span></div>
             </div>
         </div>
     </div>
@@ -251,6 +267,43 @@
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🎉 Feriados · Findes Largos</h2>
         <div id="feriados-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
     </div>
+
+    </div><!-- /hoy -->
+
+    <!-- ══ HISTÓRICO ══ lo que ya pasó: días, meses y los cierres uno por uno ══ -->
+    <div class="panel oculta" data-de="parking" data-panel="historico">
+
+    <div class="card p-5">
+        <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento MENSUAL (Días)</h2>
+        <canvas id="chartMensual" style="max-height: 180px;"></canvas>
+    </div>
+
+    <div class="card p-5">
+        <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Rendimiento ANUAL (Meses)</h2>
+        <canvas id="chartAnual" style="max-height: 180px;"></canvas>
+    </div>
+
+    <div class="card p-5">
+        <h2 class="text-center mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">Distribución Pagos (Mes)</h2>
+        <div class="flex items-center justify-between">
+            <div class="w-[45%]"><canvas id="chartPagosMes" style="max-height: 110px;"></canvas></div>
+            <div class="w-[50%] space-y-3">
+                <div class="flex flex-col border-l-4 border-[#00C853] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Efectivo</span><span id="ef-mes" class="text-lg font-black text-white">$0</span></div>
+                <div class="flex flex-col border-l-4 border-[#00E0D0] pl-3"><span class="text-[8px] text-gray-400 uppercase font-black">Tarjeta</span><span id="tj-mes" class="text-lg font-black text-white">$0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
+        <div class="history-scroll" id="lista-cierres"><p class="text-gray-500 italic text-center text-xs">Cargando...</p></div>
+        <div class="fade-bottom"></div>
+    </div>
+
+    </div><!-- /historico -->
+
+    <!-- ══ COMPARAR ══ dos periodos frente a frente, y hacia dónde va la cosa ══ -->
+    <div class="panel oculta" data-de="parking" data-panel="comparar">
 
     <div class="card">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">Comparador</h2>
@@ -277,18 +330,17 @@
         <div id="tend-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
     </div>
 
+    </div><!-- /comparar -->
+
+    <!-- ══ EVASIÓN ══ su propia pestaña porque es plata que se pierde ══ -->
+    <div class="panel oculta" data-de="parking" data-panel="evasion">
+
     <div class="card border-t-4 border-[#F87171]">
         <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">Evasión · Control de Merma</h2>
         <div id="evasion-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
     </div>
 
-    <div class="card">
-        <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">Historial de Cierres</h2>
-        <div class="history-scroll" id="lista-cierres"><p class="text-gray-500 italic text-center text-xs">Cargando...</p></div>
-        <div class="fade-bottom"></div>
-    </div>
-
-    </div><!-- /tab-parking -->
+    </div><!-- /evasion -->
     </section>
 
     <!-- ───────── MAKITO ───────── -->
@@ -299,7 +351,20 @@
             <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 text-xl leading-none">&#128274;</button>
         </div>
 
-    <div id="tab-makito">
+    <nav class="pestanas" data-de="makito" role="tablist">
+        <button class="pes" data-panel="resumen"    role="tab">Resumen</button>
+        <button class="pes" data-panel="historia"   role="tab">Historia</button>
+        <button class="pes" data-panel="productos"  role="tab">Productos</button>
+        <button class="pes" data-panel="inventario" role="tab">Inventario</button>
+    </nav>
+
+    <!-- ══ RESUMEN ══ el tamaño real del negocio y cómo viene ══ -->
+    <div class="panel" data-de="makito" data-panel="resumen">
+
+        <!-- LO QUE MAKITO LLEVA VENDIDO DESDE SIEMPRE. Estaba subvalorado justamente
+             porque nunca se veía junto: cada mes por su lado no parece nada. -->
+        <div id="makito-historico"></div>
+
         <div class="card border-t-4 border-[#FFB300]">
             <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛒 Kiosco Makito</h2>
             <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
@@ -314,6 +379,11 @@
             </div>
             <div class="p-3" style="height:210px"><canvas id="chartKioscoMeses"></canvas></div>
         </div>
+
+    </div><!-- /resumen -->
+
+    <!-- ══ HISTORIA ══ cualquier mes de los dos años y medio, día por día ══ -->
+    <div class="panel oculta" data-de="makito" data-panel="historia">
 
         <div class="card border-t-4 border-[#00E0D0] p-0 overflow-hidden">
             <div class="p-4 pb-0">
@@ -334,6 +404,16 @@
             <div class="p-3" style="height:190px"><canvas id="chartKioscoDias"></canvas></div>
         </div>
 
+    </div><!-- /historia -->
+
+    <!-- ══ PRODUCTOS ══ qué se vende de verdad, en 2 años y medio de tickets ══ -->
+    <div class="panel oculta" data-de="makito" data-panel="productos">
+        <div id="makito-productos"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </div><!-- /productos -->
+
+    <!-- ══ INVENTARIO ══ la acción del día y la lista completa ══ -->
+    <div class="panel oculta" data-de="makito" data-panel="inventario">
+
         <!-- GESTIÓN ANTES QUE CATÁLOGO, a propósito. Es la acción del día —escanear para
              reponer— y estaba al final, después de una lista de 294 productos que había
              que recorrer entera para llegar. Lo que se usa va arriba; lo que se consulta,
@@ -352,7 +432,8 @@
             <input id="inv-filtro" oninput="renderInventario()" class="comp-select w-full mb-3" placeholder="Filtrar por nombre o código…">
             <div id="inv-lista" class="space-y-2 lista-scroll"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
         </div>
-    </div><!-- /tab-makito -->
+
+    </div><!-- /inventario -->
     </section>
 
     <!-- ───────── GRAN TOTAL ───────── -->
@@ -440,6 +521,6 @@
     <!-- El ?v= sube en cada cambio: obliga al navegador a bajar el archivo nuevo
      aunque tenga el anterior guardado. Sin esto llego a pasar que el HTML era
      nuevo y el JavaScript viejo — un boton nuevo que al tocarlo no hacia nada. -->
-    <script type="module" src="js/app.js?v=6"></script>
+    <script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>
