@@ -193,6 +193,22 @@ export function renderTendenciaKiosco(unida, hasta) {
 }
 
 
+// Resumen del mes elegido, en una linea. Sin esto el calendario dibujaria barras sin
+// decir cuanto suman, que es justo lo primero que uno quiere saber al elegir un mes.
+export function resumenMes(unida, fecha) {
+    const k = clave(fecha.getFullYear(), fecha.getMonth());
+    const m = unida[k];
+    const nombre = `${MESES[fecha.getMonth()]} ${fecha.getFullYear()}`;
+    if (!m || !m.total) return { nombre, texto: `${nombre} · sin ventas registradas` };
+    const dias = m.dias_abiertos || Object.keys(m.dias || {}).length;
+    const partes = [fmt(m.total) + ' vendido'];
+    if (m.ganancia) partes.push(fmt(m.ganancia) + ' de ganancia');
+    if (dias) partes.push(dias + (dias === 1 ? ' día abierto' : ' días abiertos'));
+    if (m.tickets) partes.push(m.tickets.toLocaleString('es-CL') + ' tickets');
+    return { nombre, texto: `${nombre} · ${partes.join(' · ')}` };
+}
+
+
 export function renderMesKiosco(unida, fecha) {
     const el = document.getElementById('chartKioscoDias');
     if (!el) return;

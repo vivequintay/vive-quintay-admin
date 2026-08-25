@@ -243,7 +243,15 @@
 
         <div class="card border-t-4 border-[#00E0D0] p-0 overflow-hidden">
             <div class="p-4 pb-0">
-                <h2 id="titulo-mes-kiosco" class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest">📅 Este mes, día por día</h2>
+                <div class="flex items-center gap-2 mb-2">
+                    <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest flex-1">📅 Elige un mes</h2>
+                    <!-- Calendario NATIVO: en el teléfono abre el selector del sistema, que
+                         es el que la persona ya sabe usar. Un calendario propio se vería
+                         igual en las dos pantallas y peor en las dos. -->
+                    <input type="month" id="kiosco-mes" class="comp-select" onchange="kioscoElegirMes(this.value)">
+                    <button onclick="kioscoElegirMes('')" class="comp-select font-bold text-[#00E0D0] px-3">Hoy</button>
+                </div>
+                <p id="kiosco-mes-resumen" class="text-[10px] text-gray-400 mb-1"></p>
             </div>
             <div class="p-3" style="height:190px"><canvas id="chartKioscoDias"></canvas></div>
         </div>

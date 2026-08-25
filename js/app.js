@@ -17,7 +17,7 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
 import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
-         renderMesKiosco, vigilarTamano, makitoDeCierre } from './kiosco.js';
+         renderMesKiosco, vigilarTamano, makitoDeCierre, resumenMes } from './kiosco.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -39,6 +39,8 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
     let makitoAcum = { M: { total:0, ganancia:0, ef:0, tj:0, und:0 }, A: { total:0, ganancia:0, ef:0, tj:0, und:0 } };
     let makitoCatalogo = [];   // espejo del catálogo que sube la caja (para escanear/listar)
     let makitoCambios = [];
+    // Mes elegido en el calendario del kiosco. Vacio = el mes en curso, que es lo normal.
+    let kioscoMes = '';
     let historiaKiosco = {};   // un doc por mes (historico_kiosco), nov-2023 en adelante    // cola de órdenes del teléfono (pendiente/aplicado)
     let acum = { M: 0, A: 0, autM: 0, autA: 0, efM: 0, tjM: 0 }; // acumulados del historico (sin hoy en vivo)
     const anioActual = new Date().getFullYear();
@@ -828,17 +830,38 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
             </details>
         `;
 
-        const titulo = document.getElementById('titulo-mes-kiosco');
-        if (titulo) titulo.textContent = `📅 ${MESES[ahora.getMonth()]} ${ahora.getFullYear()}, día por día`;
+        // El mes que se dibuja: el elegido en el calendario, o el actual. Se parte a mano
+        // en vez de usar new Date('2026-02') porque esa forma se interpreta en UTC y en
+        // Chile puede caer en el mes anterior.
+        let mesVista = ahora;
+        if (/^\d{4}-\d{2}$/.test(kioscoMes)) {
+            const [a, m] = kioscoMes.split('-').map(Number);
+            mesVista = new Date(a, m - 1, 1);
+        }
+
+        const rs = resumenMes(unida, mesVista);
+        const lblRes = document.getElementById('kiosco-mes-resumen');
+        if (lblRes) lblRes.textContent = rs.texto;
 
         // Los graficos van DESPUES de pintar el HTML: si el <canvas> todavia no existe o
         // esta oculto, Chart.js lo dibuja con 0 px y queda en blanco para siempre.
         try {
-            renderTendenciaKiosco(unida, ahora);
-            renderMesKiosco(unida, ahora);
+            // La tendencia termina en el mes elegido, asi que el calendario mueve LOS DOS
+            // graficos: elegir febrero muestra febrero dia por dia y el año que llega hasta
+            // ahi. Un solo control para las dos preguntas.
+            renderTendenciaKiosco(unida, mesVista);
+            renderMesKiosco(unida, mesVista);
             vigilarTamano();   // desde aca en adelante se corrige solo (ver js/kiosco.js)
         } catch (e) { console.error('graficos kiosco:', e); }
     }
+
+    // El calendario del kiosco. Vacio vuelve al mes en curso.
+    window.kioscoElegirMes = (v) => {
+        kioscoMes = v || '';
+        const inp = document.getElementById('kiosco-mes');
+        if (inp && inp.value !== kioscoMes) inp.value = kioscoMes;
+        try { renderMakito(); } catch (e) { console.error('calendario kiosco:', e); }
+    };
 
     // ---------- NAVEGACIÓN POR PESTAÑAS (Parking / Makito) ----------
     window.mostrarTab = (t) => {

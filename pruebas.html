@@ -23,7 +23,8 @@
 // No prueban el dibujo —eso necesita datos reales y sesion— sino lo que decide los numeros
 // que el dibujo muestra, que es donde un error pasa desapercibido.
 
-import { unirHistoria, serieMensual, compararAnioAnterior, makitoDeCierre } from './js/kiosco.js';
+import { unirHistoria, serieMensual, compararAnioAnterior, makitoDeCierre,
+         resumenMes } from './js/kiosco.js';
 
 const res = [];
 let malas = 0;
@@ -91,6 +92,21 @@ igual('sin año anterior no inventa comparacion',
       compararAnioAnterior(unirHistoria({ '2026-07': { total: 1 } }, []), new Date(2026, 6, 1)), null);
 igual('con el año anterior en cero tampoco (evita dividir por cero)',
       compararAnioAnterior(unirHistoria({ '2025-07': { total: 0 }, '2026-07': { total: 5 } }, []), new Date(2026, 6, 1)), null);
+
+// ---- resumenMes: lo que dice el calendario al elegir un mes ----
+const conMes = unirHistoria({
+    '2026-02': { total: 2031055, ganancia: 1111748, tickets: 1013, dias_abiertos: 28, dias: {} },
+}, []);
+const r2 = resumenMes(conMes, new Date(2026, 1, 1));
+igual('nombra el mes en castellano', r2.nombre, 'Febrero 2026');
+igual('dice el vendido', r2.texto.includes('$2.031.055'), true);
+igual('dice la ganancia', r2.texto.includes('$1.111.748'), true);
+igual('dice los dias abiertos', r2.texto.includes('28 dias abiertos') || r2.texto.includes('28 días abiertos'), true);
+igual('un mes sin ventas lo dice, no muestra ceros',
+      resumenMes(conMes, new Date(2026, 6, 1)).texto, 'Julio 2026 · sin ventas registradas');
+igual('un solo dia va en singular',
+      resumenMes(unirHistoria({ '2026-03': { total: 5000, dias_abiertos: 1 } }, []), new Date(2026, 2, 1))
+          .texto.includes('1 día abierto'), true);
 
 // ---- entradas de mala fe ----
 igual('sin nada devuelve vacio', unirHistoria(null, null), {});
