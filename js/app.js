@@ -843,6 +843,12 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
         const lblRes = document.getElementById('kiosco-mes-resumen');
         if (lblRes) lblRes.textContent = rs.texto;
 
+        // La caja del calendario muestra SIEMPRE el mes a la vista, no solo cuando se
+        // elige uno. Nacia vacia y no se entendia que estaba mostrando el mes en curso.
+        const inpMes = document.getElementById('kiosco-mes');
+        const claveVista = `${mesVista.getFullYear()}-${String(mesVista.getMonth() + 1).padStart(2, '0')}`;
+        if (inpMes && inpMes.value !== claveVista) inpMes.value = claveVista;
+
         // Los graficos van DESPUES de pintar el HTML: si el <canvas> todavia no existe o
         // esta oculto, Chart.js lo dibuja con 0 px y queda en blanco para siempre.
         try {

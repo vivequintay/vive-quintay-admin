@@ -64,6 +64,10 @@
         .comp-select { background: #1B263B; color: #fff; font-size: 12px; border-radius: 10px; padding: 8px; border: 1px solid #1B263B; outline: none; -webkit-appearance: none; appearance: none; }
         .comp-select:focus { border-color: #00E0D0; }
         input.comp-select::-webkit-calendar-picker-indicator { filter: invert(0.7); cursor: pointer; }
+        /* El mes en MAYUSCULAS y con sitio de sobra. "SEPTIEMBRE 2026" es lo mas largo que
+           puede salir, y con la caja compartiendo linea con el titulo no cabia. */
+        .selector-mes { text-transform: uppercase; font-weight: 800; font-size: 13px;
+                        letter-spacing: .5px; padding: 10px 8px; min-width: 0; }
         .tabbtn { color: #6B7280; }
         .tabbtn.active { background: #ffffff; color: #0A2F4F; }
     </style>
@@ -243,13 +247,17 @@
 
         <div class="card border-t-4 border-[#00E0D0] p-0 overflow-hidden">
             <div class="p-4 pb-0">
+                <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest mb-2">📅 Elige un mes</h2>
+                <!-- El selector va en su PROPIA fila y ocupa el ancho. Compartiendo linea
+                     con el titulo quedaba estrecho, y el mes con su año no cabia.
+                     Calendario NATIVO: en el teléfono abre el selector del sistema, que es
+                     el que la persona ya sabe usar. Uno propio se vería igual en las dos
+                     pantallas y peor en las dos. -->
                 <div class="flex items-center gap-2 mb-2">
-                    <h2 class="text-[11.5px] font-bold text-gray-400 uppercase tracking-widest flex-1">📅 Elige un mes</h2>
-                    <!-- Calendario NATIVO: en el teléfono abre el selector del sistema, que
-                         es el que la persona ya sabe usar. Un calendario propio se vería
-                         igual en las dos pantallas y peor en las dos. -->
-                    <input type="month" id="kiosco-mes" class="comp-select" onchange="kioscoElegirMes(this.value)">
-                    <button onclick="kioscoElegirMes('')" class="comp-select font-bold text-[#00E0D0] px-3">Hoy</button>
+                    <input type="month" id="kiosco-mes" class="comp-select selector-mes flex-1"
+                           onchange="kioscoElegirMes(this.value)">
+                    <button onclick="kioscoElegirMes('')"
+                            class="comp-select font-black text-[#00E0D0] px-4 whitespace-nowrap">HOY</button>
                 </div>
                 <p id="kiosco-mes-resumen" class="text-[10px] text-gray-400 mb-1"></p>
             </div>
@@ -340,6 +348,9 @@
         navigator.serviceWorker.register('./sw.js').catch(() => {});
     }
 </script>
-    <script type="module" src="js/app.js"></script>
+    <!-- El ?v= sube en cada cambio: obliga al navegador a bajar el archivo nuevo
+     aunque tenga el anterior guardado. Sin esto llego a pasar que el HTML era
+     nuevo y el JavaScript viejo — un boton nuevo que al tocarlo no hacia nada. -->
+    <script type="module" src="js/app.js?v=4"></script>
 </body>
 </html>
