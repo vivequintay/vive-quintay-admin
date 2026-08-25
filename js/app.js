@@ -17,7 +17,7 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
 import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
-         renderMesKiosco } from './kiosco.js';
+         renderMesKiosco, vigilarTamano } from './kiosco.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -832,6 +832,7 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
         try {
             renderTendenciaKiosco(unida, ahora);
             renderMesKiosco(unida, ahora);
+            vigilarTamano();   // desde aca en adelante se corrige solo (ver js/kiosco.js)
         } catch (e) { console.error('graficos kiosco:', e); }
     }
 

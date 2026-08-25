@@ -24,6 +24,57 @@ const MESES_TENDENCIA = 12;
 
 const clave = (a, m) => `${a}-${String(m + 1).padStart(2, '0')}`;
 
+// Lo ultimo que se dibujo, para poder repetirlo cuando el contenedor cambie de tamaño.
+let ultimo = null;
+
+
+// EL GRAFICO VIGILA SU PROPIA CAJA.
+// -----------------------------------------------------------------------------
+// Se probaron dos arreglos antes que este y ninguno bastó: redimensionar al cambiar de
+// pestaña, y desactivar la proporción automática. El síntoma seguía — en una tablet el
+// dibujo ocupaba ~490 px de una tarjeta de ~1110, que es justo el ancho de un teléfono.
+// Chart.js habia medido una vez, con la medida equivocada, y no volvia a mirar.
+//
+// El problema de fondo era yo tratando de adivinar CUANDO hay que remedir: al mostrar la
+// pestaña, al girar la pantalla, al cargar los datos... Siempre falta un caso. Un
+// ResizeObserver no adivina: mira la caja y avisa cuando cambia, sea cual sea el motivo.
+//
+// El respiro de 120 ms junta los cambios en rafaga (al mostrar una pestaña el navegador
+// puede disparar varios) y evita que redibujar provoque otro aviso en cadena.
+let vigilando = false;
+let pendiente = null;
+
+// El <canvas> se estira a su caja por CSS. Es el cinturon ademas de los tirantes: aunque
+// Chart.js calcule un ancho equivocado, el elemento no puede quedar mas angosto que su
+// contenedor — y al observar el cambio, se redibuja con la medida buena.
+function estirar(c) {
+    if (!c) return;
+    c.style.width = '100%';
+    c.style.height = '100%';
+    c.style.display = 'block';
+}
+
+
+export function vigilarTamano() {
+    if (vigilando) return;
+    const cajas = ['chartKioscoMeses', 'chartKioscoDias']
+        .map((id) => document.getElementById(id))
+        .filter((c) => c && c.parentElement)
+        .map((c) => c.parentElement);
+    if (!cajas.length || typeof ResizeObserver === 'undefined') return;
+
+    const obs = new ResizeObserver(() => {
+        if (!ultimo) return;
+        clearTimeout(pendiente);
+        pendiente = setTimeout(() => {
+            const { unida, fecha } = ultimo;
+            try { renderTendenciaKiosco(unida, fecha); renderMesKiosco(unida, fecha); } catch (e) {}
+        }, 120);
+    });
+    cajas.forEach((c) => obs.observe(c));
+    vigilando = true;
+}
+
 
 // Une las dos épocas en un solo mapa { '2026-05': {total, ganancia, tickets, dias} }.
 export function unirHistoria(historico, cierres) {
@@ -87,8 +138,10 @@ export function compararAnioAnterior(unida, fecha) {
 export function renderTendenciaKiosco(unida, hasta) {
     const el = document.getElementById('chartKioscoMeses');
     if (!el) return;
+    ultimo = { unida, fecha: hasta };
     const serie = serieMensual(unida, hasta);
     if (charts.kioscoMeses) charts.kioscoMeses.destroy();
+    estirar(el);
     charts.kioscoMeses = new Chart(el, {
         type: 'bar',
         data: {
@@ -123,6 +176,7 @@ export function renderMesKiosco(unida, fecha) {
     const ultimo = new Date(fecha.getFullYear(), fecha.getMonth() + 1, 0).getDate();
     const labels = Array.from({ length: ultimo }, (_, i) => i + 1);
     if (charts.kioscoDias) charts.kioscoDias.destroy();
+    estirar(el);
     charts.kioscoDias = new Chart(el, {
         type: 'bar',
         data: {
