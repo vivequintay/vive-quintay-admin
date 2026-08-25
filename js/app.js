@@ -17,7 +17,7 @@ import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './uti
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
 import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
-         renderMesKiosco, vigilarTamano } from './kiosco.js';
+         renderMesKiosco, vigilarTamano, makitoDeCierre } from './kiosco.js';
 
     const firebaseConfig = { apiKey: "AIzaSyAXGH39g0gLBjVF0XHznEoDwG3O8xrD76k", authDomain: "vive-quintay-spa.firebaseapp.com", projectId: "vive-quintay-spa", storageBucket: "vive-quintay-spa.firebasestorage.app", messagingSenderId: "1016972577353", appId: "1:1016972577353:web:81a7a1af882c8296640d98" };
     const app = initializeApp(firebaseConfig);
@@ -149,8 +149,12 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
                 const totalDia = num(d.total_recaudado);
                 const pasesDia = num(d.cant_pases), minutosDia = num(d.cant_minutos);
                 const autosDia = pasesDia + minutosDia;
-                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia, evadidos: num(d.cant_evadidos), montoEvadido: num(d.monto_evadido_estimado) });
-                const mk = d.makito || { total: num(d.total_makito), ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+                const mk = makitoDeCierre(d);
+                // `makito` VIAJA con el cierre. Se leia unas lineas mas abajo y no se
+                // adjuntaba, asi que el grafico del kiosco por dia salia vacio aunque el
+                // mes SI mostrara la cifra: la tarjeta la saca de los acumulados y el
+                // grafico de aca. Un mes con cierres y un grafico en blanco es la señal.
+                todosLosCierres.push({ fecha: d.fecha, date: f, total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia, evadidos: num(d.cant_evadidos), montoEvadido: num(d.monto_evadido_estimado), makito: mk });
                 if (f.getFullYear() === hoy.getFullYear() && f.getMonth() === hoy.getMonth() && f.getDate() === hoy.getDate()) {
                     cierreHoy = { total: totalDia, autos: autosDia, ef: num(d.efectivo), tj: num(d.tarjeta), pases: pasesDia, minutos: minutosDia };
                     makitoCierreHoy = { total: num(mk.total), ganancia: num(mk.ganancia), efectivo: num(mk.efectivo), tarjeta: num(mk.tarjeta), unidades: num(mk.unidades) };

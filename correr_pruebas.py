@@ -9,6 +9,7 @@ Uso:  python correr_pruebas.py
 import html
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import threading
@@ -27,6 +28,7 @@ class Silencioso(SimpleHTTPRequestHandler):
 
 
 def main():
+    perfil = tempfile.mkdtemp(prefix="perfil_pruebas_")
     srv = ThreadingHTTPServer(("127.0.0.1", PUERTO), partial(Silencioso, directory=AQUI))
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     time.sleep(0.3)
@@ -34,12 +36,16 @@ def main():
         r = subprocess.run([
             CHROME, "--headless=new", "--disable-gpu", "--no-first-run",
             "--disable-extensions",
-            "--user-data-dir=" + os.path.join(tempfile.gettempdir(), "perfil_pruebas"),
+            # PERFIL NUEVO CADA VEZ. Reutilizarlo hacia que Chrome sirviera la version
+            # anterior de pruebas.html desde su cache: se agregaban pruebas y el contador
+            # seguia diciendo 18. Un perfil desechable no tiene cache que servir.
+            "--user-data-dir=" + perfil,
             "--virtual-time-budget=6000", "--dump-dom",
             f"http://127.0.0.1:{PUERTO}/pruebas.html",
         ], capture_output=True, text=True, timeout=180, errors="replace")
     finally:
         srv.shutdown()
+        shutil.rmtree(perfil, ignore_errors=True)
 
     m = re.search(r'<pre id="salida">(.*?)</pre>', r.stdout or "", re.S)
     if not m:

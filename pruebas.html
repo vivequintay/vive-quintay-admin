@@ -23,7 +23,7 @@
 // No prueban el dibujo —eso necesita datos reales y sesion— sino lo que decide los numeros
 // que el dibujo muestra, que es donde un error pasa desapercibido.
 
-import { unirHistoria, serieMensual, compararAnioAnterior } from './js/kiosco.js';
+import { unirHistoria, serieMensual, compararAnioAnterior, makitoDeCierre } from './js/kiosco.js';
 
 const res = [];
 let malas = 0;
@@ -34,6 +34,18 @@ function igual(nombre, obtenido, esperado) {
     if (!ok) malas++;
     res.push(`${ok ? '  ok  ' : ' MAL  '} ${nombre}${ok ? '' : `\n         esperaba ${b}\n         obtuvo   ${a}`}`);
 }
+
+// ---- makitoDeCierre: la forma real del documento ----
+// Nace de un fallo que llego a produccion: agosto tenia cierres con ventas de kiosco y el
+// grafico por dia salia vacio, porque el cierre se normalizaba sin el campo `makito`.
+igual('lee el sub-mapa nuevo', makitoDeCierre({ makito: { total: 90000, ganancia: 48000 } }).total, 90000);
+igual('trae tambien la ganancia', makitoDeCierre({ makito: { total: 1, ganancia: 7 } }).ganancia, 7);
+igual('los cierres VIEJOS usaban total_makito y deben seguir sumando',
+      makitoDeCierre({ total_makito: 55000 }).total, 55000);
+igual('el sub-mapa nuevo manda sobre el campo viejo',
+      makitoDeCierre({ total_makito: 1, makito: { total: 90000 } }).total, 90000);
+igual('un cierre sin nada de kiosco vale cero', makitoDeCierre({}).total, 0);
+igual('un documento nulo no revienta', makitoDeCierre(null).total, 0);
 
 // ---- unirHistoria: las dos epocas ----
 const HIST = {

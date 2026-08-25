@@ -76,6 +76,30 @@ export function vigilarTamano() {
 }
 
 
+// Saca de un documento de cierre el sub-mapa del kiosco.
+//
+// Existe por un fallo que llego a produccion: el cierre se normalizaba SIN el campo
+// `makito`, asi que el grafico por dia salia vacio aunque la tarjeta del mes mostrara la
+// cifra —la tarjeta la saca de los acumulados y el grafico de aca—. Y mis pruebas pasaban,
+// porque los cierres de mentira que yo armaba SI traian el campo. La prueba no se parecia
+// a la realidad, que es la peor forma de tener pruebas.
+//
+// Poniendolo aca, la forma del cierre se comprueba UNA vez y en un solo sitio.
+export function makitoDeCierre(d) {
+    if (!d) return { total: 0, ganancia: 0, efectivo: 0, tarjeta: 0, unidades: 0 };
+    const mk = d.makito || {};
+    return {
+        // `total_makito` es la forma VIEJA, de los cierres anteriores al sub-mapa. Sigue
+        // habiendo documentos asi en la nube y tienen que seguir sumando.
+        total: num(mk.total !== undefined ? mk.total : d.total_makito),
+        ganancia: num(mk.ganancia),
+        efectivo: num(mk.efectivo),
+        tarjeta: num(mk.tarjeta),
+        unidades: num(mk.unidades),
+    };
+}
+
+
 // Une las dos épocas en un solo mapa { '2026-05': {total, ganancia, tickets, dias} }.
 export function unirHistoria(historico, cierres) {
     const out = {};
