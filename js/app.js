@@ -16,6 +16,8 @@
 import { num, fmt, MESES, isoKey, fechaCortaISO, gmEsc, animateNum } from './util.js';
 import { escanear, detener as detenerEscaner } from './escaner.js';
 import { charts, renderPie, renderLine, renderBar } from './graficos.js';
+import { iniciarNavegacion, irA, irAPortada } from './navegacion.js';
+import { renderTotal as pintarTotal } from './total.js';
 import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
          renderMesKiosco, vigilarTamano, makitoDeCierre, resumenMes } from './kiosco.js';
 
@@ -869,27 +871,59 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
         try { renderMakito(); } catch (e) { console.error('calendario kiosco:', e); }
     };
 
-    // ---------- NAVEGACIÓN POR PESTAÑAS (Parking / Makito) ----------
-    window.mostrarTab = (t) => {
-        document.getElementById('tab-parking').classList.toggle('hidden', t !== 'parking');
-        document.getElementById('tab-makito').classList.toggle('hidden', t !== 'makito');
-        document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
+    // Junta lo de los dos negocios para la pagina del Gran Total. Los numeros salen de
+    // donde ya viven: el parking de `acum`/`dataHoy`, el kiosco de `makitoAcum`/`makitoHoy`.
+    // No se recalcula nada aparte, para que las tres paginas no puedan contradecirse.
+    function renderTotal() {
+        const ahora = new Date();
+        const unida = unirHistoria(historiaKiosco, todosLosCierres);
+        const comp = compararAnioAnterior(unida, ahora);
+
+        // Autos y evasion del MES, sumados desde los cierres del mes en curso.
+        let autos = 0, evadidos = 0, montoEvadido = 0, ticketsKiosco = 0;
+        todosLosCierres.forEach(c => {
+            if (!c.date) return;
+            if (c.date.getFullYear() === ahora.getFullYear() && c.date.getMonth() === ahora.getMonth()) {
+                autos += num(c.autos);
+                evadidos += num(c.evadidos);
+                montoEvadido += num(c.montoEvadido);
+            }
+        });
+        const mesKiosco = unida[`${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`];
+        ticketsKiosco = mesKiosco ? num(mesKiosco.tickets) : 0;
+
+        pintarTotal({
+            anio: ahora.getFullYear(),
+            parkingMes: num(acum.M) + num(dataHoy.total),
+            kioscoMes: num(makitoAcum.M.total) + num(makitoHoy.total),
+            gananciaKiosco: num(makitoAcum.M.ganancia) + num(makitoHoy.ganancia),
+            parkingAnio: num(acum.A) + num(dataHoy.total),
+            kioscoAnio: num(makitoAcum.A.total) + num(makitoHoy.total),
+            autos, evadidos, montoEvadido, ticketsKiosco,
+            variacionTotal: comp ? comp.variacion : null,
+            etiquetaAnterior: comp ? comp.etiqueta : null,
+        });
+    }
+
+    // ---------- NAVEGACIÓN (portada + tres páginas que se deslizan) ----------
+    // La mecánica vive en js/navegacion.js. Aquí sólo se dice QUÉ hacer cuando una página
+    // queda a la vista: redibujar lo que estaba escondido. Un gráfico pintado en una
+    // página que no se veía guarda una medida equivocada y se queda con ella.
+    window.irA = (n) => irA(n);
+    window.irAPortada = irAPortada;
+
+    // Se mantiene `mostrarTab` porque el HTML podría seguir llamándola desde una versión
+    // vieja guardada en el teléfono: que apunte a la página nueva en vez de reventar.
+    window.mostrarTab = (t) => irA(t === 'makito' ? 'makito' : 'parking');
+
+    iniciarNavegacion((pagina) => {
         window.scrollTo({ top: 0, behavior: 'auto' });
-        // UN GRÁFICO DIBUJADO MIENTRAS SU PESTAÑA ESTABA OCULTA QUEDA CON LA MEDIDA MAL.
-        // Chart.js guarda el tamaño al pintar, y con el contenedor escondido ese tamaño es
-        // cero o el de otra pantalla; al mostrarse, el dibujo se queda chico y ocupa sólo
-        // la parte izquierda. En un teléfono angosto casi no se nota; en una tablet ancha,
-        // mucho — que es justo donde se reportó.
-        //
-        // Esto corría SOLO para 'parking', así que los del kiosco nunca se corregían.
-        // Ahora corre para las dos, y al kiosco se le REDIBUJA en vez de sólo redimensionar:
-        // resize() depende de que el gráfico tenga un tamaño previo válido, y si se pintó
-        // con el contenedor en cero no lo tiene. Volver a dibujar no tiene ese problema.
         setTimeout(() => {
             try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {}
-            if (t === 'makito') { try { renderMakito(); } catch (e) {} }
+            if (pagina === 'makito') { try { renderMakito(); } catch (e) {} }
+            if (pagina === 'total') { try { renderTotal(); } catch (e) {} }
         }, 60);
-    };
+    });
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------
     function gmFlash(msg) { const m = document.getElementById('gm-scan-msg'); if (m) m.textContent = msg; }

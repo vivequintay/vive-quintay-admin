@@ -25,6 +25,7 @@
 
 import { unirHistoria, serieMensual, compararAnioAnterior, makitoDeCierre,
          resumenMes } from './js/kiosco.js';
+import { consolidar, tasaCaptura, gastoPorAuto, lucesYSombras } from './js/total.js';
 
 const res = [];
 let malas = 0;
@@ -107,6 +108,27 @@ igual('un mes sin ventas lo dice, no muestra ceros',
 igual('un solo dia va en singular',
       resumenMes(unirHistoria({ '2026-03': { total: 5000, dias_abiertos: 1 } }, []), new Date(2026, 2, 1))
           .texto.includes('1 día abierto'), true);
+
+// ---- GRAN TOTAL: lo que solo se ve juntando los dos negocios ----
+const cons = consolidar(500000, 100000);
+igual('suma los dos negocios', cons.total, 600000);
+igual('dice cuanto pesa el kiosco', Math.round(cons.pesoKiosco), 17);
+igual('sin nada no divide por cero', consolidar(0, 0).pesoKiosco, 0);
+
+igual('tasa de captura: 30 tickets de 100 autos', Math.round(tasaCaptura(30, 100)), 30);
+igual('con pocos autos NO da un numero (seria ruido)', tasaCaptura(1, 3), null);
+igual('mas tickets que autos se topa en 100%', tasaCaptura(500, 100), 100);
+igual('gasto por auto reparte entre TODOS los autos', gastoPorAuto(100000, 100), 1000);
+igual('sin autos no divide por cero', gastoPorAuto(100000, 0), 0);
+
+const ls = lucesYSombras({ variacionTotal: 12, etiquetaAnterior: 'Ago-25', captura: 30,
+                           margenKiosco: 54, pesoKiosco: 17, evadidos: 3, montoEvadido: 9000 });
+igual('una subida es luz', ls.luces.some(t => t.includes('subió 12%')), true);
+igual('la evasion es sombra', ls.sombras.some(t => t.includes('3 autos se fueron')), true);
+igual('una captura baja pasa a sombra',
+      lucesYSombras({ captura: 5 }).sombras.some(t => t.includes('5 de cada 100')), true);
+igual('un mes sin nada que reportar no inventa frases',
+      lucesYSombras({}).sombras.length, 0);
 
 // ---- entradas de mala fe ----
 igual('sin nada devuelve vacio', unirHistoria(null, null), {});

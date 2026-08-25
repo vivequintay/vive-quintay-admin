@@ -70,6 +70,44 @@
                         letter-spacing: .5px; padding: 10px 8px; min-width: 0; }
         .tabbtn { color: #6B7280; }
         .tabbtn.active { background: #ffffff; color: #0A2F4F; }
+
+        /* ═══ NAVEGACIÓN: una portada y tres páginas que se deslizan ═══════════════
+           La portada es la puerta de la empresa; adentro, cada negocio tiene su página
+           entera en vez de compartir la pantalla con el otro. Se desliza entre ellas.
+
+           El deslizamiento es SCROLL NATIVO con scroll-snap, no una librería ni gestos
+           hechos a mano: el navegador ya sabe hacerlo con la inercia y el rebote del
+           sistema, y ningún gesto propio se siente tan bien como el del teléfono. */
+        #portada { position: fixed; inset: 0; z-index: 90; display: flex; flex-direction: column;
+                   align-items: center; justify-content: center; gap: 14px; padding: 28px;
+                   background: radial-gradient(ellipse at center, #0E3D62 0%, #061D31 100%); }
+        #portada.oculta { display: none; }
+        .portada-boton { width: 100%; max-width: 380px; padding: 22px; border-radius: 22px;
+                         font-size: 1.15rem; font-weight: 900; letter-spacing: .5px;
+                         display: flex; align-items: center; justify-content: center; gap: 10px;
+                         border: 1px solid rgba(255,255,255,.12); transition: transform .12s ease; }
+        .portada-boton:active { transform: scale(.97); }
+
+        #paginas { display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
+                   scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
+                   scrollbar-width: none; }
+        #paginas::-webkit-scrollbar { display: none; }
+        .pagina { min-width: 100%; scroll-snap-align: start; scroll-snap-stop: always;
+                  flex-shrink: 0; padding: 0 2px; }
+
+        /* Barra de la página: el logo lleva de vuelta a la portada. Reemplaza al título
+           "VIVE QUINTAY / Por Mickael Piat", que dentro de un negocio sobraba: ya se sabe
+           de quién es, y ocupaba la mejor parte de la pantalla. */
+        .barra-pagina { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+        .barra-pagina .marca { width: 34px; height: 34px; border-radius: 10px; flex: 0 0 auto; }
+        .barra-pagina .titulo { font-size: 1.05rem; font-weight: 900; letter-spacing: .5px; flex: 1; }
+
+        /* Los puntos dicen en cuál de las tres estás y dejan saltar tocándolos. */
+        .puntos { position: fixed; left: 0; right: 0; bottom: 10px; z-index: 45;
+                  display: flex; justify-content: center; gap: 8px; pointer-events: none; }
+        .puntos .p { width: 7px; height: 7px; border-radius: 9999px; background: rgba(255,255,255,.22);
+                     transition: all .25s ease; pointer-events: auto; }
+        .puntos .p.on { width: 22px; background: #00E0D0; }
     </style>
 </head>
 <body class="p-4 mb-10">
@@ -80,27 +118,31 @@
         <div class="splash-sub">Por Mickael Piat</div>
     </div>
 
-    <header class="flex justify-between items-center mb-6">
-        <div>
-            <h1 class="brand-title uppercase">VIVE QUINTAY</h1>
-            <p class="text-gray-400 text-[10px] uppercase tracking-widest font-bold">Por Mickael Piat</p>
-        </div>
-        <div class="flex items-center gap-3">
-            <div class="text-right">
-                <span id="fecha-actual" class="text-xs font-semibold block text-white">--/--/--</span>
-                <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando...</span>
-            </div>
-            <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 hover:text-[#00E0D0] text-xl leading-none transition-colors">&#128274;</button>
-        </div>
-    </header>
-
-    <div class="sticky top-0 z-40 bg-[#0A2F4F] pt-1 pb-3 -mx-4 px-4 mb-2">
-        <div class="flex gap-1 bg-[#0D3B5C] p-1 rounded-2xl">
-            <button data-tab="parking" onclick="mostrarTab('parking')" class="tabbtn active flex-1 py-3 rounded-xl text-sm font-black transition-all">🅿️ Parking</button>
-            <button data-tab="makito" onclick="mostrarTab('makito')" class="tabbtn flex-1 py-3 rounded-xl text-sm font-black transition-all">🛒 Makito</button>
-        </div>
+    <!-- ═══ PORTADA: la puerta de la empresa ═══════════════════════════════════
+         Antes lo primero eran dos pestañas compartiendo el ancho. Ahora cada negocio
+         tiene su pagina entera, y esto es el vestibulo. -->
+    <div id="portada" class="oculta">
+        <img src="logo.png" alt="Vive Quintay" style="width:84px;height:84px;border-radius:20px">
+        <div class="brand-title uppercase" style="font-size:1.5rem">VIVE QUINTAY</div>
+        <p class="text-gray-400 text-[10px] uppercase tracking-[4px] font-bold mb-4">Por Mickael Piat</p>
+        <button onclick="irA('parking')" class="portada-boton bg-[#0D3B5C] text-white">🅿️ PARKING</button>
+        <button onclick="irA('makito')" class="portada-boton bg-[#FFB300] text-[#0A2F4F]">🛒 MAKITO</button>
+        <button onclick="irA('total')" class="portada-boton bg-transparent text-[#00E0D0]" style="padding:14px;font-size:.9rem">Σ  GRAN TOTAL</button>
     </div>
 
+    <div id="paginas">
+
+    <!-- ───────── PARKING ───────── -->
+    <section class="pagina" data-pagina="parking">
+        <div class="barra-pagina">
+            <img src="logo.png" alt="Inicio" class="marca" onclick="irAPortada()">
+            <span class="titulo text-white">🅿️ PARKING</span>
+            <div class="text-right">
+                <span id="fecha-actual" class="text-[11px] font-semibold block text-white">--/--/--</span>
+                <span id="hora-sincro" class="text-[9px] text-[#00E0D0] font-mono italic block">Sincronizando…</span>
+            </div>
+            <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 text-xl leading-none">&#128274;</button>
+        </div>
     <div id="tab-parking">
 
     <div class="card border-t-4 border-[#00C853] p-0 overflow-hidden">
@@ -228,8 +270,17 @@
     </div>
 
     </div><!-- /tab-parking -->
+    </section>
 
-    <div id="tab-makito" class="hidden">
+    <!-- ───────── MAKITO ───────── -->
+    <section class="pagina" data-pagina="makito">
+        <div class="barra-pagina">
+            <img src="logo.png" alt="Inicio" class="marca" onclick="irAPortada()">
+            <span class="titulo text-[#FFB300]">🛒 MAKITO</span>
+            <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 text-xl leading-none">&#128274;</button>
+        </div>
+
+    <div id="tab-makito">
         <div class="card border-t-4 border-[#FFB300]">
             <h2 class="mb-4 text-[11.5px] font-bold text-gray-400 uppercase tracking-widest text-center">🛒 Kiosco Makito</h2>
             <div id="makito-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
@@ -283,6 +334,25 @@
             <div id="inv-lista" class="space-y-2 lista-scroll"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
         </div>
     </div><!-- /tab-makito -->
+    </section>
+
+    <!-- ───────── GRAN TOTAL ───────── -->
+    <section class="pagina" data-pagina="total">
+        <div class="barra-pagina">
+            <img src="logo.png" alt="Inicio" class="marca" onclick="irAPortada()">
+            <span class="titulo text-[#00E0D0]">Σ GRAN TOTAL</span>
+            <button onclick="cerrarSesion()" title="Cerrar sesión" class="text-gray-500 text-xl leading-none">&#128274;</button>
+        </div>
+        <div id="total-contenido"><p class="text-gray-500 italic text-center text-xs">Cargando…</p></div>
+    </section>
+
+    </div><!-- /paginas -->
+
+    <div class="puntos" id="puntos-paginas">
+        <span class="p" onclick="irA('parking')"></span>
+        <span class="p" onclick="irA('makito')"></span>
+        <span class="p" onclick="irA('total')"></span>
+    </div>
 
     <div id="pantalla-bloqueo" class="fixed inset-0 z-[100] bg-[#0A2F4F] flex flex-col items-center justify-center p-6">
         <h1 class="text-4xl font-black text-[#00E0D0] mb-8 italic tracking-tighter">VIVE QUINTAY</h1>
@@ -351,6 +421,6 @@
     <!-- El ?v= sube en cada cambio: obliga al navegador a bajar el archivo nuevo
      aunque tenga el anterior guardado. Sin esto llego a pasar que el HTML era
      nuevo y el JavaScript viejo — un boton nuevo que al tocarlo no hacia nada. -->
-    <script type="module" src="js/app.js?v=4"></script>
+    <script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>
