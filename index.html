@@ -88,12 +88,30 @@
                          border: 1px solid rgba(255,255,255,.12); transition: transform .12s ease; }
         .portada-boton:active { transform: scale(.97); }
 
-        #paginas { display: flex; overflow-x: auto; scroll-snap-type: x mandatory;
-                   scroll-behavior: smooth; -webkit-overflow-scrolling: touch;
-                   scrollbar-width: none; }
+        /* CADA PAGINA ES SU PROPIO ALTO Y SU PROPIO SCROLL.
+           El primer intento dejo el alto libre y fue un desastre en las dos pantallas: al
+           poner `overflow-x` en un contenedor, el navegador convierte TAMBIEN su eje
+           vertical (la regla dice que si un eje deja de ser 'visible', el otro tampoco
+           puede serlo). Sin un alto que lo limitara, el contenedor crecia con la pagina mas
+           larga, el scroll vertical se perdia y el contenido desbordaba hacia la derecha.
+
+           Ahora la pista mide exactamente la pantalla y cada pagina hace su propio scroll
+           vertical dentro. `100dvh` y no `100vh`: en el movil la barra del navegador
+           aparece y desaparece, y `vh` se queda con la medida de cuando estaba escondida —
+           por eso las paginas quedaban mas largas que la pantalla. */
+        #paginas { display: flex; height: 100dvh; overflow-x: auto; overflow-y: hidden;
+                   scroll-snap-type: x mandatory; scroll-behavior: smooth;
+                   -webkit-overflow-scrolling: touch; scrollbar-width: none; }
         #paginas::-webkit-scrollbar { display: none; }
-        .pagina { min-width: 100%; scroll-snap-align: start; scroll-snap-stop: always;
-                  flex-shrink: 0; padding: 0 2px; }
+        .pagina { width: 100%; min-width: 100%; flex: 0 0 100%;
+                  scroll-snap-align: start; scroll-snap-stop: always;
+                  overflow-y: auto; overflow-x: hidden;
+                  /* El padding lo pone la PAGINA, no el <body>. Con el padding en el body,
+                     las tarjetas que usan margen negativo para pegarse a los bordes se
+                     salian de su pagina y empujaban el ancho. */
+                  padding: 14px 14px 70px; }
+        .pagina::-webkit-scrollbar { width: 4px; }
+        .pagina::-webkit-scrollbar-thumb { background: #1B263B; border-radius: 10px; }
 
         /* Barra de la página: el logo lleva de vuelta a la portada. Reemplaza al título
            "VIVE QUINTAY / Por Mickael Piat", que dentro de un negocio sobraba: ya se sabe
@@ -110,7 +128,8 @@
         .puntos .p.on { width: 22px; background: #00E0D0; }
     </style>
 </head>
-<body class="p-4 mb-10">
+<!-- Sin padding ni scroll propio: cada pagina se encarga de los suyos. -->
+<body class="overflow-hidden">
 
     <div id="splash">
         <img src="logo.png" alt="Vive Quintay" class="splash-logo">
@@ -421,6 +440,6 @@
     <!-- El ?v= sube en cada cambio: obliga al navegador a bajar el archivo nuevo
      aunque tenga el anterior guardado. Sin esto llego a pasar que el HTML era
      nuevo y el JavaScript viejo — un boton nuevo que al tocarlo no hacia nada. -->
-    <script type="module" src="js/app.js?v=5"></script>
+    <script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>
