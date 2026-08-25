@@ -841,8 +841,20 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco,
         document.getElementById('tab-makito').classList.toggle('hidden', t !== 'makito');
         document.querySelectorAll('.tabbtn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
         window.scrollTo({ top: 0, behavior: 'auto' });
-        // los gráficos que se pintaron mientras la pestaña estaba oculta quedan en 0px → re-dimensionar
-        if (t === 'parking') setTimeout(() => { try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {} }, 60);
+        // UN GRÁFICO DIBUJADO MIENTRAS SU PESTAÑA ESTABA OCULTA QUEDA CON LA MEDIDA MAL.
+        // Chart.js guarda el tamaño al pintar, y con el contenedor escondido ese tamaño es
+        // cero o el de otra pantalla; al mostrarse, el dibujo se queda chico y ocupa sólo
+        // la parte izquierda. En un teléfono angosto casi no se nota; en una tablet ancha,
+        // mucho — que es justo donde se reportó.
+        //
+        // Esto corría SOLO para 'parking', así que los del kiosco nunca se corregían.
+        // Ahora corre para las dos, y al kiosco se le REDIBUJA en vez de sólo redimensionar:
+        // resize() depende de que el gráfico tenga un tamaño previo válido, y si se pintó
+        // con el contenedor en cero no lo tiene. Volver a dibujar no tiene ese problema.
+        setTimeout(() => {
+            try { Object.values(charts).forEach(c => c && c.resize && c.resize()); } catch (e) {}
+            if (t === 'makito') { try { renderMakito(); } catch (e) {} }
+        }, 60);
     };
 
     // ---------- GESTIÓN MAKITO (escáner + crear/reponer desde el teléfono) ----------

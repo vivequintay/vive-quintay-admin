@@ -100,6 +100,12 @@ export function renderTendenciaKiosco(unida, hasta) {
             ],
         },
         options: {
+            // ALTO FIJO manda sobre la proporción. Estos dos gráficos viven en un
+            // contenedor con `height` en el HTML; sin desactivar `maintainAspectRatio`,
+            // Chart.js impone su propia razón 2:1 y en pantalla ancha el dibujo queda
+            // deformado contra la izquierda en vez de ocupar el espacio.
+            responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: true, labels: { color: '#9CA3AF', font: { size: 9 }, boxWidth: 10, padding: 8 } },
                 tooltip: { callbacks: { label: (c) => `${c.dataset.label}: ${fmt(c.raw)}` } },
@@ -127,6 +133,12 @@ export function renderMesKiosco(unida, fecha) {
             }],
         },
         options: {
+            // ALTO FIJO manda sobre la proporción. Estos dos gráficos viven en un
+            // contenedor con `height` en el HTML; sin desactivar `maintainAspectRatio`,
+            // Chart.js impone su propia razón 2:1 y en pantalla ancha el dibujo queda
+            // deformado contra la izquierda en vez de ocupar el espacio.
+            responsive: true,
+            maintainAspectRatio: false,
             plugins: {
                 legend: { display: false },
                 tooltip: { callbacks: { title: (c) => `Día ${c[0].label}`, label: (c) => fmt(c.raw) } },
