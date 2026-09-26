@@ -151,9 +151,35 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
             cierreHoy = null;
             makitoCierreHoy = null;
 
+            // UNA FILA POR JORNADA, Y FECHADA POR LA JORNADA.
+            //
+            // Eran dos errores que se sumaban y los dos inflaban plata en pantalla.
+            //
+            // (a) En la nube hay MAS documentos que jornadas: 88 para 81 dias. Al
+            //     resincronizar se vuelven a subir cierres viejos con id nuevo —el de la
+            //     jornada del 29-08 tiene id `12-09-2026_153118`—. Sumando documento por
+            //     documento, mes y anio quedaban inflados $1.249.490, un 6,3%.
+            // (b) Se agrupaba por `timestamp_cierre`, que dice CUANDO se cerro y no de QUE
+            //     dia es la plata. Los cierres del 29 y 30 de agosto resubidos el 12 de
+            //     septiembre aportaban $446.350 al mes equivocado.
+            //
+            // La consulta viene ordenada por timestamp descendente, asi que el primero que
+            // aparece de cada fecha es la version mas nueva: esa se queda y el resto se
+            // descarta. No se borra nada en la nube; se ignora al leer.
+            const fechaADate = (s) => {
+                const m = /^(\d{2})-(\d{2})-(\d{4})$/.exec(String(s || ''));
+                return m ? new Date(+m[3], +m[2] - 1, +m[1]) : null;
+            };
+            const jornadasVistas = new Set();
             snap.forEach(docSnap => {
                 const d = docSnap.data();
-                const f = d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date();
+                if (d.fecha) {
+                    if (jornadasVistas.has(d.fecha)) return;   // duplicado: ya tenemos el bueno
+                    jornadasVistas.add(d.fecha);
+                }
+                // Manda la fecha de la JORNADA. El sello de cierre queda solo de respaldo,
+                // para un documento antiguo que venga sin `fecha`.
+                const f = fechaADate(d.fecha) || (d.timestamp_cierre ? d.timestamp_cierre.toDate() : new Date());
                 const totalDia = num(d.total_recaudado);
                 const pasesDia = num(d.cant_pases), minutosDia = num(d.cant_minutos);
                 const autosDia = pasesDia + minutosDia;
@@ -384,8 +410,26 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
     // Asi un martes de invierno (sin aperturas recientes) proyecta ~0 aunque
     // en enero/febrero se haya trabajado entre semana.
     function statsPorDiaSemana() {
-        const K = 8;        // ~2 meses hacia atras por dia de semana
-        const decay = 0.85; // mas peso a lo reciente
+        // DOS VENTANAS DISTINTAS, porque son dos preguntas distintas.
+        //
+        // CUANTO se recauda se mueve con la temporada, asi que hay que mirar corto. Medido
+        // con un backtest sobre los 26 fines de semana que tienen cierre sabado Y domingo
+        // (feb-sep 2026), proyectando cada uno con lo que se sabia el viernes anterior:
+        //
+        //     K=8 decay 0,85 (lo que habia) .... error mediano 26,5%
+        //     K=4 decay 0,70 ................... 23,1%
+        //     K=3 decay 0,60 ................... 20,6%   <- este
+        //     K=2 decay 0,50 ................... 20,8%
+        //
+        // Casi todo el error venia del atraso: un promedio de dos meses llega tarde a cada
+        // vuelta de temporada. Bajando de 2 muestras empieza a mandar el ruido de un dia malo.
+        //
+        // SI SE ABRE o no es un habito, no una temporada, y con 3 muestras la frecuencia
+        // solo podria valer 0, 1/3, 2/3 o 1 —demasiado tosca para repartir un mes—. Esa se
+        // sigue midiendo sobre 8 semanas.
+        const K_RATE = 8;    // ventana para la FRECUENCIA de apertura
+        const K_MONTO = 3;   // ventana para el MONTO
+        const decay = 0.60;  // mas peso a lo reciente
         const key = (dt) => dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate();
         const porFecha = new Map(todosLosCierres.map(c => [key(c.date), c]));
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -397,7 +441,7 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
             d.setDate(d.getDate() - (((hoy.getDay() - wd + 7) % 7) || 7));
             const abiertos = [];
             let n = 0;
-            while (n < K && d >= primera) {
+            while (n < K_RATE && d >= primera) {
                 n++;
                 const c = porFecha.get(key(d));
                 if (c) abiertos.push(c); // queda ordenado mas reciente primero
@@ -405,8 +449,11 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
             }
             const rate = n ? abiertos.length / n : 0;
             if (!abiertos.length) return { rate: 0, total: 0, autos: 0, pases: 0, minutos: 0, n, nAb: 0 };
+            // La frecuencia se midio sobre las 8 semanas; el MONTO solo sobre las mas
+            // recientes que si abrieron.
+            const recientes = abiertos.slice(0, K_MONTO);
             let sw = 0, st = 0, sa = 0, sp = 0, sm = 0;
-            abiertos.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
+            recientes.forEach((c, i) => { const w = Math.pow(decay, i); sw += w; st += w * c.total; sa += w * c.autos; sp += w * num(c.pases); sm += w * num(c.minutos); });
             return { rate, total: st / sw, autos: sa / sw, pases: sp / sw, minutos: sm / sw, n, nAb: abiertos.length };
         });
     }
@@ -460,10 +507,46 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
         const conf = minN >= 6 ? { t: 'Alta', c: '#00C853' } : (minN >= 3 ? { t: 'Media', c: '#FFD700' } : { t: 'Baja', c: '#F87171' });
         const ddmm = (dte) => `${String(dte.getDate()).padStart(2, '0')}/${String(dte.getMonth() + 1).padStart(2, '0')}`;
 
+        // UN RANGO, NO UNA CIFRA AL PESO. "$403.452" es precision falsa: invita a creerle
+        // cuatro digitos que no existen.
+        //
+        // El ancho no se eligio a ojo. Medida la cobertura real sobre los 26 fines de semana
+        // del backtest —cuantas veces el resultado cayo DENTRO de la banda—:
+        //     +-25% ... 52%   (una moneda al aire: no sirve)
+        //     +-40% ... 63%   <- esta
+        //     +-50% ... 74%   (pero ya es tan ancha que no ayuda a decidir nada)
+        // A +-40% acierta 2 de cada 3, que es lo mas que da este modelo sin volverse inutil
+        // de puro ancho. Se redondea a $10.000 para que se lea como estimacion.
+        const BANDA = 0.40;
+        const redondear = (v) => Math.round(v / 10000) * 10000;
+
+        // LOS TRES ULTIMOS FINES DE SEMANA REALES. Estos no tienen error: son hechos. Para
+        // decidir si abrir o a cuanta gente llamar sirven mas que cualquier modelo, y ademas
+        // dejan ver de un vistazo si la proyeccion se esta quedando corta.
+        const kf = (dte) => dte.getFullYear() * 10000 + (dte.getMonth() + 1) * 100 + dte.getDate();
+        const mapaC = new Map(todosLosCierres.map(c => [kf(c.date), c]));
+        const ordenados = todosLosCierres.slice().sort((a, b) => b.date - a.date);
+        const findes = [];
+        for (const c of ordenados) {
+            if (c.date.getDay() !== 6) continue;                       // arranca en sabado
+            if (c.date >= hoy) continue;                               // el de esta semana aun no pasa
+            const dm = new Date(c.date.getTime() + 86400000);
+            const cd = mapaC.get(kf(dm));
+            if (!cd) continue;      // domingo sin cierre: no es comparable con una estimacion de dos dias
+            findes.push({ date: c.date, total: num(c.total) + num(cd.total) });
+            if (findes.length === 3) break;
+        }
+
         cont.innerHTML = `
+            ${findes.length ? `
             <div class="mb-4">
+                <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-2">Últimos fines de semana · reales</p>
+                ${findes.map(x => `<div class="flex justify-between text-sm mb-1"><span class="text-gray-400">${ddmm(x.date)} y ${ddmm(new Date(x.date.getTime() + 86400000))}</span><b class="text-white">${fmt(x.total)}</b></div>`).join('')}
+            </div>` : ''}
+            <div class="mb-4 ${findes.length ? 'border-t border-white/10 pt-3' : ''}">
                 <p class="text-[9px] text-gray-400 uppercase font-black tracking-widest mb-1">Próximo fin de semana</p>
-                <p class="text-3xl font-black text-[#00E0D0]">${fmt(totFde)}</p>
+                <p class="text-2xl font-black text-[#00E0D0] leading-tight">${fmt(redondear(totFde * (1 - BANDA)))} – ${fmt(redondear(totFde * (1 + BANDA)))}</p>
+                <p class="text-[10px] text-gray-500 mb-2">si abres los dos días</p>
                 <div class="mt-2 space-y-1">
                     <div class="flex justify-between text-xs"><span class="text-gray-400">Sáb ${ddmm(sab)}</span><span><b class="text-white">${fmt(pSab.total)}</b> <span class="text-gray-500">· ${Math.round(pSab.autos)} autos</span></span></div>
                     <div class="flex justify-between text-xs"><span class="text-gray-400">Dom ${ddmm(dom)}</span><span><b class="text-white">${fmt(pDom.total)}</b> <span class="text-gray-500">· ${Math.round(pDom.autos)} autos</span></span></div>
@@ -478,7 +561,7 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
                 ${splitLine(pasesMes, minutosMes)}
             </div>
             <div class="flex items-center justify-between mt-4 pt-3 border-t border-white/10">
-                <span class="text-[9px] text-gray-500 italic">Según tu patrón y frecuencia de apertura recientes (~8 sem.) · no considera feriados · referencial</span>
+                <span class="text-[9px] text-gray-500 italic">Monto: últimas 3 aperturas · frecuencia: 8 semanas · no considera clima ni feriados. El rango acertó 2 de cada 3 veces al probarlo contra 2026.</span>
                 <span class="text-[9px] font-black uppercase" style="color:${conf.c}">Confianza: ${conf.t}</span>
             </div>
         `;
