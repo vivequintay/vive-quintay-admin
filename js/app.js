@@ -779,6 +779,14 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
         // "Hoy": si la jornada esta abierta usa lo vivo; si cerro, el makito del cierre de hoy.
         const live = (makitoHoy && num(makitoHoy.total) > 0) ? makitoHoy : (makitoCierreHoy || {});
         const hoyT = num(live.total), hoyG = num(live.ganancia), hoyU = num(live.unidades);
+        // Distribucion de pagos de HOY. Estaba solo la del mes y adentro del plegado, asi que
+        // el dato que hace falta para cuadrar la jornada contra el POS no se veia en ninguna
+        // parte —aunque la caja lo sube en `makito.tarjeta` desde siempre—.
+        const hoyEf = num(live.efectivo), hoyTj = num(live.tarjeta);
+        // El parking de hoy, en vivo o del cierre si la jornada ya cerro. Mismo criterio que
+        // `live`: admin_stats vuelve a cero al cerrar y sin esto el numero se desplomaba.
+        const park = num(dataHoy.total) > 0 ? dataHoy : (cierreHoy || {});
+        const parkTj = num(park.tj);
         const M = makitoAcum.M, A = makitoAcum.A;
         const mesT = num(M.total) + num(makitoHoy.total), mesG = num(M.ganancia) + num(makitoHoy.ganancia);
         const mesEf = num(M.ef) + num(makitoHoy.efectivo), mesTj = num(M.tj) + num(makitoHoy.tarjeta);
@@ -805,6 +813,25 @@ import { unirHistoria, compararAnioAnterior, renderTendenciaKiosco, renderHistor
                 <p class="text-4xl font-black text-[#FFB300] leading-tight">${fmt(hoyT)}</p>
                 <p class="text-xs text-gray-400 mt-1">Ganancia <b class="text-[#00C853]">${fmt(hoyG)}</b>${hoyU ? ` · ${hoyU.toLocaleString('es-CL')} u.` : ''}</p>
             </div>
+            <!-- Como se pago HOY. El kiosco cobra por la misma maquina que el parking, asi
+                 que el informe del POS trae los dos juntos y por separado no cuadra nunca. -->
+            <div class="grid grid-cols-2 gap-3 mb-3">
+                <div class="glass p-3 border-l-4 border-[#00C853]">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Efectivo hoy</p>
+                    <p class="font-black text-white">${fmt(hoyEf)}</p>
+                </div>
+                <div class="glass p-3 border-l-4 border-[#00E0D0]">
+                    <p class="text-[8px] text-gray-400 uppercase font-black">Tarjeta hoy</p>
+                    <p class="font-black text-white">${fmt(hoyTj)}</p>
+                </div>
+            </div>
+            ${(parkTj + hoyTj) > 0 ? `
+            <div class="glass p-3 mb-3 border-l-4 border-[#FFB300]">
+                <p class="text-[8px] text-gray-400 uppercase font-black tracking-widest">Tarjeta del día · parking + kiosco</p>
+                <p class="text-2xl font-black text-[#00E0D0] leading-tight">${fmt(parkTj + hoyTj)}</p>
+                <p class="text-[10px] text-gray-500 mt-1">Parking ${fmt(parkTj)} + kiosco ${fmt(hoyTj)}. Es lo que debe marcar el informe del POS.</p>
+            </div>` : ''}
+
             <div class="grid grid-cols-2 gap-3">
                 <div class="glass p-3">
                     <p class="text-[8px] text-gray-400 uppercase font-black">Este mes</p>
