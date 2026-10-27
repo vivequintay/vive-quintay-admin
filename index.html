@@ -19,7 +19,7 @@
         .carousel-dots .dot.active { width: 18px; background: #00E0D0; }
         #splash { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(ellipse at center, #0E3D62 0%, #061D31 100%); transition: opacity .5s ease; }
         #splash.oculto { opacity: 0; pointer-events: none; }
-        .splash-logo { width: 96px; height: 96px; border-radius: 22px; box-shadow: 0 10px 40px rgba(0,0,0,.4); animation: splashRise .7s cubic-bezier(.175,.885,.32,1.275) .1s both; }
+        .splash-logo { width: 96px; height: 96px; border-radius: 50%; box-shadow: 0 10px 40px rgba(0,0,0,.4); animation: splashRise .7s cubic-bezier(.175,.885,.32,1.275) .1s both; }
         .splash-title { margin-top: 18px; font-size: 1.5rem; font-weight: 900; letter-spacing: 1px; background: linear-gradient(90deg, #7B9EFF 0%, #52D45A 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; animation: splashFade .5s ease .45s both; }
         .splash-sub { margin-top: 4px; font-size: .6rem; letter-spacing: 4px; color: rgba(255,255,255,.4); text-transform: uppercase; animation: splashFade .5s ease .65s both; }
         @keyframes splashRise { from { opacity: 0; transform: translateY(20px) scale(.9); } to { opacity: 1; transform: none; } }
@@ -154,7 +154,7 @@
 <body class="overflow-hidden">
 
     <div id="splash">
-        <img src="logo.png" alt="Vive Quintay" class="splash-logo">
+        <img src="icon-512.png" alt="Vive Quintay" class="splash-logo">
         <div class="splash-title">VIVE QUINTAY</div>
         <div class="splash-sub">Por Mickael Piat</div>
     </div>
